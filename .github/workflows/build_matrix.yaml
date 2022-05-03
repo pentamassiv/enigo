@@ -28,6 +28,7 @@ jobs:
          elif [ "$RUNNER_OS" == "Windows" ]; then
               echo "$RUNNER_OS"
          elif [ "$RUNNER_OS" == "macOS" ]; then
+              echo "$RUNNER_OS"
          else
               echo "$RUNNER_OS not supported"
               exit 1

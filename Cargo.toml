@@ -17,14 +17,18 @@ license = "MIT"
 [dependencies]
 serde = { version = "1.0.137", optional = true }
 serde_derive = { version = "1.0.137", optional = true }
+cfg-if = "1.0.0"
 
 [features]
 with_serde = ["serde", "serde_derive"]
+x11=[]
+wayland=[]
+# It's okay to set x11 as the default even when the target os is not Linux because the Linux code is hidden behind a conditional compilation
+default=["x11"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3.9", features = ["winuser"] }
 
-# TODO: outdated
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.22.3"
 objc = "0.2.7"

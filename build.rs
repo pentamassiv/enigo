@@ -1,10 +1,17 @@
+// There is no build.rs needed on Windows
 #[cfg(target_os = "windows")]
 fn main() {}
 
+// There is no build.rs needed on macOS
 #[cfg(target_os = "macos")]
 fn main() {}
 
-#[cfg(target_os = "linux")]
+// There is no build.rs needed if wayland protocols are used
+#[cfg(all(target_os = "linux", not(feature = "x11")))]
+fn main() {}
+
+// If x11 is used, a build.rs is needed to use the libraries
+#[cfg(all(target_os = "linux", feature = "x11"))]
 fn main() {
     use std::env;
     use std::fs::File;

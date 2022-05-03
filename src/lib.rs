@@ -53,24 +53,22 @@
 //! ```
 #![deny(missing_docs)]
 
-#[cfg(target_os = "macos")]
-#[macro_use]
-extern crate objc;
-
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "macos")]
-pub use macos::Enigo;
-
-#[cfg(target_os = "windows")]
-mod win;
-#[cfg(target_os = "windows")]
-pub use win::Enigo;
-
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(target_os = "linux")]
-pub use linux::Enigo;
+cfg_if::cfg_if! {
+    if #[cfg(target_os = "macos")] {
+        #[macro_use]
+        extern crate objc;
+        mod macos;
+        pub use macos::Enigo;
+    } else if #[cfg(target_os = "windows")] {
+        mod win;
+        pub use win::Enigo;
+    } else if #[cfg(target_os = "linux")] {
+        mod linux;
+        pub use linux::Enigo;
+    } else {
+        panic!();
+    }
+}
 
 /// DSL parser module
 pub mod dsl;

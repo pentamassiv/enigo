@@ -1,32 +1,60 @@
-name: Build example
+name: Build & Test
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_LOG: "trace"
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
+  buid-test:
+    strategy:
+      matrix:
+        platform:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.platform }}
 
     steps:
-    - name: Update system
-      run: sudo apt-get update -q -y && sudo apt-get upgrade -y
-    - name: Install libxdo-dev
-      run: sudo apt-get install -y libxdo-dev 
-    - uses: actions/checkout@v3
-    - name: Build DSL example
-      run: cargo build --verbose --example dsl
-    - name: Build key example
-      run: cargo build --verbose --example key
-    - name: Build keyboard example
-      run: cargo build --verbose --example keyboard
-    - name: Build mouse example
-      run: cargo build --verbose --example mouse
-    - name: Build timer example
-      run: cargo build --verbose --example timer
+      - name:  Install dependencies
+        run:   |
+         if [ "$RUNNER_OS" == "Linux" ]; then
+              sudo apt-get update -q -y && sudo apt-get upgrade -y && sudo apt-get install -y libxdo-dev 
+         elif [ "$RUNNER_OS" == "Windows" ]; then
+              echo "$RUNNER_OS"
+         elif [ "$RUNNER_OS" == "macOS" ]; then
+              echo "$RUNNER_OS"
+         else
+              echo "$RUNNER_OS not supported"
+              exit 1
+         fi
+        shell: bash
+
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+
+      - name: Build DSL example
+        run: cargo build --verbose --example dsl
+      - name: Build key example
+        run: cargo build --verbose --example key
+      - name: Build keyboard example
+        run: cargo build --verbose --example keyboard
+      - name: Build mouse example
+        run: cargo build --verbose --example mouse
+      - name: Build timer example
+        run: cargo build --verbose --example timer

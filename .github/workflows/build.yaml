@@ -15,6 +15,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Update system
+      run: apt-get update -q -y && apt-get upgrade -y
+    - name: Install libxdo-dev
+      run: apt-get install -y libxdo-dev 
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build --verbose

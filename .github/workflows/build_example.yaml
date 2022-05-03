@@ -1,4 +1,4 @@
-name: Build
+name: Build example
 
 on:
   push:
@@ -15,6 +15,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Update system
+      run: sudo apt-get update -q -y && sudo apt-get upgrade -y
+    - name: Install libxdo-dev
+      run: sudo apt-get install -y libxdo-dev 
     - uses: actions/checkout@v3
     - name: Build DSL example
       run: cargo build --verbose --example dsl

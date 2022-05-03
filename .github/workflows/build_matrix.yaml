@@ -26,6 +26,7 @@ jobs:
          if [ "$RUNNER_OS" == "Linux" ]; then
               sudo apt-get update -q -y && sudo apt-get upgrade -y && sudo apt-get install -y libxdo-dev 
          elif [ "$RUNNER_OS" == "Windows" ]; then
+              echo "$RUNNER_OS"
          elif [ "$RUNNER_OS" == "macOS" ]; then
          else
               echo "$RUNNER_OS not supported"

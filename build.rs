@@ -5,18 +5,12 @@ fn main() {}
 fn main() {}
 
 #[cfg(target_os = "linux")]
-use pkg_config;
-#[cfg(target_os = "linux")]
-use std::env;
-#[cfg(target_os = "linux")]
-use std::fs::File;
-#[cfg(target_os = "linux")]
-use std::io::Write;
-#[cfg(target_os = "linux")]
-use std::path::Path;
-
-#[cfg(target_os = "linux")]
 fn main() {
+    use std::env;
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
+
     let libraries = [
         "xext",
         "gl",
@@ -58,4 +52,5 @@ fn main() {
     } else if target.contains("freebsd") || target.contains("dragonfly") {
         println!("cargo:rustc-link-lib=c");
     }
+    println!("cargo:rerun-if-changed=build.rs");
 }

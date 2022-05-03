@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate objc;
+
 mod macos_impl;
 
 pub mod keycodes;

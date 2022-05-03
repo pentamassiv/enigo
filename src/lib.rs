@@ -55,6 +55,8 @@
 
 cfg_if::cfg_if! {
     if #[cfg(target_os = "macos")] {
+        #[macro_use]
+        extern crate objc;
         mod macos;
         pub use macos::Enigo;
     } else if #[cfg(target_os = "windows")] {

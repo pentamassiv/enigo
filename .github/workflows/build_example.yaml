@@ -16,9 +16,9 @@ jobs:
 
     steps:
     - name: Update system
-      run: apt-get update -q -y && apt-get upgrade -y
+      run: sudo apt-get update -q -y && sudo apt-get upgrade -y
     - name: Install libxdo-dev
-      run: apt-get install -y libxdo-dev 
+      run: sudo apt-get install -y libxdo-dev 
     - uses: actions/checkout@v3
     - name: Build DSL example
       run: cargo build --verbose --example dsl

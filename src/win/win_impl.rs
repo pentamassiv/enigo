@@ -1,7 +1,7 @@
 use winapi;
 
-use self::winapi::shared::windef::POINT;
 use self::winapi::ctypes::c_int;
+use self::winapi::shared::windef::POINT;
 use self::winapi::um::winuser::*;
 
 use crate::win::keycodes::*;
@@ -50,8 +50,10 @@ impl MouseControllable for Enigo {
         mouse_event(
             MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
             0,
-            (x - unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) }) * 65535 / unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) },
-            (y - unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) }) * 65535 / unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) },
+            (x - unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) }) * 65535
+                / unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) },
+            (y - unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) }) * 65535
+                / unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) },
         );
     }
 
@@ -148,7 +150,8 @@ impl KeyboardControllable for Enigo {
 }
 
 impl Enigo {
-    /// Gets the (width, height) of the main display in screen coordinates (pixels).
+    /// Gets the (width, height) of the main display in screen coordinates
+    /// (pixels).
     ///
     /// # Example
     ///
@@ -157,9 +160,9 @@ impl Enigo {
     /// let mut size = Enigo::main_display_size();
     /// ```
     pub fn main_display_size() -> (usize, usize) {
-      let w = unsafe { GetSystemMetrics(SM_CXSCREEN) as usize };
-      let h = unsafe { GetSystemMetrics(SM_CYSCREEN) as usize };
-      (w, h)
+        let w = unsafe { GetSystemMetrics(SM_CXSCREEN) as usize };
+        let h = unsafe { GetSystemMetrics(SM_CYSCREEN) as usize };
+        (w, h)
     }
 
     /// Gets the location of mouse in screen coordinates (pixels).
@@ -174,9 +177,9 @@ impl Enigo {
         let mut point = POINT { x: 0, y: 0 };
         let result = unsafe { GetCursorPos(&mut point) };
         if result != 0 {
-          (point.x, point.y)
+            (point.x, point.y)
         } else {
-          (0, 0)
+            (0, 0)
         }
     }
 

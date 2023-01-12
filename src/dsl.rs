@@ -25,19 +25,18 @@ pub enum ParseError {
     ///         ^
     UnmatchedClose,
 }
-impl Error for ParseError {
-    fn description(&self) -> &str {
-        match *self {
+
+impl Error for ParseError {}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match *self {
             ParseError::UnknownTag(_) => "Unknown tag",
             ParseError::UnexpectedOpen => "Unescaped open bracket ({) found inside tag name",
             ParseError::UnmatchedOpen => "Unmatched open bracket ({). No matching close (})",
             ParseError::UnmatchedClose => "Unmatched close bracket (}). No previous open ({)",
-        }
-    }
-}
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.description())
+        };
+        f.write_str(text)
     }
 }
 

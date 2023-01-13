@@ -1,15 +1,25 @@
+use std::os::raw::{c_char, c_int, c_uchar, c_uint, c_ulong, c_ushort, c_void};
+use std::{thread, time};
+
 use core_graphics;
 
-// TODO(dustin): use only the things i need
-
-use self::core_graphics::display::*;
-use self::core_graphics::event::*;
-use self::core_graphics::event_source::*;
-
-use crate::macos::keycodes::*;
-use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 use objc::runtime::Class;
-use std::os::raw::*;
+
+use self::core_graphics::display::{
+    CFIndex, CFRelease, CGDisplayPixelsHigh, CGDisplayPixelsWide, CGMainDisplayID, CGPoint,
+};
+use self::core_graphics::event::{
+    CGEvent, CGEventTapLocation, CGEventType, CGKeyCode, CGMouseButton,
+};
+use self::core_graphics::event_source::{CGEventSource, CGEventSourceRef, CGEventSourceStateID};
+
+use crate::macos::keycodes::{
+    kVK_CapsLock, kVK_Command, kVK_Control, kVK_Delete, kVK_DownArrow, kVK_End, kVK_Escape, kVK_F1,
+    kVK_F10, kVK_F11, kVK_F12, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9,
+    kVK_ForwardDelete, kVK_Home, kVK_LeftArrow, kVK_Option, kVK_PageDown, kVK_PageUp, kVK_Return,
+    kVK_RightArrow, kVK_Shift, kVK_Space, kVK_Tab, kVK_UpArrow,
+};
+use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 // required for pressedMouseButtons on NSEvent
 #[link(name = "AppKit", kind = "framework")]
@@ -369,8 +379,6 @@ impl KeyboardControllable for Enigo {
 
     fn key_click(&mut self, key: Key) {
         let keycode = self.key_to_keycode(key);
-
-        use std::{thread, time};
         thread::sleep(time::Duration::from_millis(20));
         let event = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, true)
             .expect("Failed creating event");
@@ -383,7 +391,6 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_down(&mut self, key: Key) {
-        use std::{thread, time};
         thread::sleep(time::Duration::from_millis(20));
         let event =
             CGEvent::new_keyboard_event(self.event_source.clone(), self.key_to_keycode(key), true)
@@ -392,7 +399,6 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_up(&mut self, key: Key) {
-        use std::{thread, time};
         thread::sleep(time::Duration::from_millis(20));
         let event =
             CGEvent::new_keyboard_event(self.event_source.clone(), self.key_to_keycode(key), false)
@@ -408,6 +414,7 @@ impl Enigo {
     }
 
     /// Fetches the `(width, height)` in pixels of the main display
+    #[must_use]
     pub fn main_display_size() -> (usize, usize) {
         let display_id = unsafe { CGMainDisplayID() };
         let width = unsafe { CGDisplayPixelsWide(display_id) };
@@ -417,8 +424,9 @@ impl Enigo {
 
     /// Returns the current mouse location in Cocoa coordinates which have Y
     /// inverted from the Carbon coordinates used in the rest of the API.
-    /// This function exists so that mouse_move_relative only has to fetch
-    /// the screen size once.
+    /// This function exists so that [`Enigo::mouse_move_relative`] only has to
+    /// fetch the screen size once.
+    #[must_use]
     fn mouse_location_raw_coords() -> (i32, i32) {
         let ns_event = Class::get("NSEvent").unwrap();
         let pt: NSPoint = unsafe { msg_send![ns_event, mouseLocation] };
@@ -426,6 +434,7 @@ impl Enigo {
     }
 
     /// The mouse coordinates in points, only works on the main display
+    #[must_use]
     pub fn mouse_location() -> (i32, i32) {
         let (x, y_inv) = Self::mouse_location_raw_coords();
         let (_, display_height) = Self::main_display_size();
@@ -433,10 +442,9 @@ impl Enigo {
     }
 
     fn key_to_keycode(&self, key: Key) -> CGKeyCode {
-        #[allow(deprecated)]
         // I mean duh, we still need to support deprecated keys until they're removed
         match key {
-            Key::Alt => kVK_Option,
+            Key::Alt | Key::Option => kVK_Option,
             Key::Backspace => kVK_Delete,
             Key::CapsLock => kVK_CapsLock,
             Key::Control => kVK_Control,
@@ -458,7 +466,6 @@ impl Enigo {
             Key::F9 => kVK_F9,
             Key::Home => kVK_Home,
             Key::LeftArrow => kVK_LeftArrow,
-            Key::Option => kVK_Option,
             Key::PageDown => kVK_PageDown,
             Key::PageUp => kVK_PageUp,
             Key::Return => kVK_Return,
@@ -468,13 +475,12 @@ impl Enigo {
             Key::Tab => kVK_Tab,
             Key::UpArrow => kVK_UpArrow,
             Key::Raw(raw_keycode) => raw_keycode,
-            Key::Layout(c) => self.get_layoutdependent_keycode(c.to_string()),
-
+            Key::Layout(c) => self.get_layoutdependent_keycode(&c.to_string()),
             Key::Super | Key::Command | Key::Windows | Key::Meta => kVK_Command,
         }
     }
 
-    fn get_layoutdependent_keycode(&self, string: String) -> CGKeyCode {
+    fn get_layoutdependent_keycode(&self, string: &str) -> CGKeyCode {
         let mut pressed_keycode = 0;
 
         // loop through every keycode (0 - 127)
@@ -523,6 +529,7 @@ impl Enigo {
         None
     }
 
+    #[allow(clippy::unused_self)]
     fn create_string_for_key(&self, keycode: u16, modifier: u32) -> CFStringRef {
         let current_keyboard = unsafe { TISCopyCurrentKeyboardInputSource() };
         let layout_data = unsafe {

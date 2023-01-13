@@ -81,6 +81,7 @@ impl Enigo {
     /// Get the delay per keypress.
     /// Default value is 12000.
     /// This is Linux-specific.
+    #[must_use]
     pub fn delay(&self) -> u64 {
         self.delay
     }
@@ -163,7 +164,6 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
     if let Key::Raw(k) = key {
         return Cow::Owned(format!("{k}"));
     }
-    #[allow(deprecated)]
     // I mean duh, we still need to support deprecated keys until they're removed
     Cow::Borrowed(match key {
         Key::Alt => "Alt",
@@ -187,19 +187,17 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
         Key::F8 => "F8",
         Key::F9 => "F9",
         Key::Home => "Home",
-        Key::Layout(_) => unreachable!(),
         Key::LeftArrow => "Left",
         Key::Option => "Option",
         Key::PageDown => "Page_Down",
         Key::PageUp => "Page_Up",
-        Key::Raw(_) => unreachable!(),
         Key::Return => "Return",
         Key::RightArrow => "Right",
         Key::Shift => "Shift",
         Key::Space => "space",
         Key::Tab => "Tab",
         Key::UpArrow => "Up",
-
+        Key::Layout(_) | Key::Raw(_) => unreachable!(),
         Key::Command | Key::Super | Key::Windows | Key::Meta => "Super",
     })
 }

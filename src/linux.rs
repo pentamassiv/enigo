@@ -81,7 +81,6 @@ impl Enigo {
     /// Get the delay per keypress.
     /// Default value is 12000.
     /// This is Linux-specific.
-    #[must_use]
     pub fn delay(&self) -> u64 {
         self.delay
     }
@@ -125,12 +124,14 @@ impl MouseControllable for Enigo {
         }
     }
     fn mouse_scroll_x(&mut self, length: i32) {
+        let button;
         let mut length = length;
-        let button = if length < 0 {
-            MouseButton::ScrollLeft
+
+        if length < 0 {
+            button = MouseButton::ScrollLeft;
         } else {
-            MouseButton::ScrollRight
-        };
+            button = MouseButton::ScrollRight;
+        }
 
         if length < 0 {
             length = -length;
@@ -141,12 +142,14 @@ impl MouseControllable for Enigo {
         }
     }
     fn mouse_scroll_y(&mut self, length: i32) {
+        let button;
         let mut length = length;
-        let button = if length < 0 {
-            MouseButton::ScrollUp
+
+        if length < 0 {
+            button = MouseButton::ScrollUp;
         } else {
-            MouseButton::ScrollDown
-        };
+            button = MouseButton::ScrollDown;
+        }
 
         if length < 0 {
             length = -length;
@@ -162,8 +165,9 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
         return Cow::Owned(format!("U{:X}", c as u32));
     }
     if let Key::Raw(k) = key {
-        return Cow::Owned(format!("{k}"));
+        return Cow::Owned(format!("{}", k as u16))
     }
+    #[allow(deprecated)]
     // I mean duh, we still need to support deprecated keys until they're removed
     Cow::Borrowed(match key {
         Key::Alt => "Alt",
@@ -175,9 +179,6 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
         Key::End => "End",
         Key::Escape => "Escape",
         Key::F1 => "F1",
-        Key::F10 => "F10",
-        Key::F11 => "F11",
-        Key::F12 => "F12",
         Key::F2 => "F2",
         Key::F3 => "F3",
         Key::F4 => "F4",
@@ -186,18 +187,31 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
         Key::F7 => "F7",
         Key::F8 => "F8",
         Key::F9 => "F9",
+        Key::F10 => "F10",
+        Key::F11 => "F11",
+        Key::F12 => "F12",
+        Key::F13 => "F13",
+        Key::F14 => "F14",
+        Key::F15 => "F15",
+        Key::F16 => "F16",
+        Key::F17 => "F17",
+        Key::F18 => "F18",
+        Key::F19 => "F19",
+        Key::F20 => "F20",
         Key::Home => "Home",
+        Key::Layout(_) => unreachable!(),
         Key::LeftArrow => "Left",
         Key::Option => "Option",
         Key::PageDown => "Page_Down",
         Key::PageUp => "Page_Up",
+        Key::Raw(_) => unreachable!(),
         Key::Return => "Return",
         Key::RightArrow => "Right",
         Key::Shift => "Shift",
         Key::Space => "space",
         Key::Tab => "Tab",
         Key::UpArrow => "Up",
-        Key::Layout(_) | Key::Raw(_) => unreachable!(),
+
         Key::Command | Key::Super | Key::Windows | Key::Meta => "Super",
     })
 }

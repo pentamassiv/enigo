@@ -25,25 +25,23 @@ pub enum ParseError {
     ///         ^
     UnmatchedClose,
 }
-
-impl Error for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = match *self {
+impl Error for ParseError {
+    fn description(&self) -> &str {
+        match *self {
             ParseError::UnknownTag(_) => "Unknown tag",
             ParseError::UnexpectedOpen => "Unescaped open bracket ({) found inside tag name",
             ParseError::UnmatchedOpen => "Unmatched open bracket ({). No matching close (})",
             ParseError::UnmatchedClose => "Unmatched close bracket (}). No previous open ({)",
-        };
-        f.write_str(text)
+        }
+    }
+}
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.description())
     }
 }
 
 /// Evaluate the DSL. This tokenizes the input and presses the keys.
-/// # Errors
-///
-/// Will return [`ParseError`] if the input cannot be parsed
 pub fn eval<K>(enigo: &mut K, input: &str) -> Result<(), ParseError>
 where
     K: KeyboardControllable,
@@ -72,6 +70,12 @@ enum Token {
 }
 
 fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
+    let mut unicode = false;
+
+    let mut tokens = Vec::new();
+    let mut buffer = String::new();
+    let mut iter = input.chars().peekable();
+
     fn flush(tokens: &mut Vec<Token>, buffer: String, unicode: bool) {
         if !buffer.is_empty() {
             if unicode {
@@ -81,12 +85,6 @@ fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
             }
         }
     }
-
-    let mut unicode = false;
-
-    let mut tokens = Vec::new();
-    let mut buffer = String::new();
-    let mut iter = input.chars().peekable();
 
     while let Some(c) = iter.next() {
         if c == '{' {
@@ -103,14 +101,14 @@ fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
                             Some('{') => match iter.peek() {
                                 Some(&'{') => {
                                     iter.next();
-                                    c = '{';
+                                    c = '{'
                                 }
                                 _ => return Err(ParseError::UnexpectedOpen),
                             },
                             Some('}') => match iter.peek() {
                                 Some(&'}') => {
                                     iter.next();
-                                    c = '}';
+                                    c = '}'
                                 }
                                 _ => break,
                             },

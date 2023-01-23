@@ -1,26 +1,12 @@
-use std::mem::{size_of, transmute, transmute_copy};
-use std::{thread, time};
-
 use winapi;
 
-use self::winapi::ctypes::c_int;
 use self::winapi::shared::windef::POINT;
-use self::winapi::um::winuser::{
-    GetCursorPos, GetSystemMetrics, MapVirtualKeyW, SendInput, VkKeyScanW, INPUT, INPUT_KEYBOARD,
-    INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, KEYEVENTF_UNICODE, LPINPUT,
-    MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-    MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
-    MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT, SM_CXSCREEN,
-    SM_CXVIRTUALSCREEN, SM_CYSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
-};
+use self::winapi::ctypes::c_int;
+use self::winapi::um::winuser::*;
 
-use crate::win::keycodes::{
-    EVK_BACK, EVK_CAPITAL, EVK_DELETE, EVK_DOWN, EVK_END, EVK_ESCAPE, EVK_F1, EVK_F10, EVK_F11,
-    EVK_F12, EVK_F2, EVK_F3, EVK_F4, EVK_F5, EVK_F6, EVK_F7, EVK_F8, EVK_F9, EVK_HOME,
-    EVK_LCONTROL, EVK_LEFT, EVK_LWIN, EVK_MENU, EVK_NEXT, EVK_PRIOR, EVK_RETURN, EVK_RIGHT,
-    EVK_SHIFT, EVK_SPACE, EVK_TAB, EVK_UP,
-};
+use crate::win::keycodes::*;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
+use std::mem::*;
 
 /// The main struct for handling the event emitting
 #[derive(Default)]
@@ -64,10 +50,8 @@ impl MouseControllable for Enigo {
         mouse_event(
             MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
             0,
-            (x - unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) }) * 65535
-                / unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) },
-            (y - unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) }) * 65535
-                / unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) },
+            (x - unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) }) * 65535 / unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) },
+            (y - unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) }) * 65535 / unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) },
         );
     }
 
@@ -134,7 +118,7 @@ impl KeyboardControllable for Enigo {
                 self.unicode_key_click(result[0]);
             } else {
                 for utf16_surrogate in result {
-                    self.unicode_key_down(*utf16_surrogate);
+                    self.unicode_key_down(utf16_surrogate.clone());
                 }
                 // do i need to produce a keyup?
                 // self.unicode_key_up(0);
@@ -144,6 +128,7 @@ impl KeyboardControllable for Enigo {
 
     fn key_click(&mut self, key: Key) {
         let scancode = self.key_to_scancode(key);
+        use std::{thread, time};
         keybd_event(KEYEVENTF_SCANCODE, 0, scancode);
         thread::sleep(time::Duration::from_millis(20));
         keybd_event(KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE, 0, scancode);
@@ -163,8 +148,7 @@ impl KeyboardControllable for Enigo {
 }
 
 impl Enigo {
-    /// Gets the (width, height) of the main display in screen coordinates
-    /// (pixels).
+    /// Gets the (width, height) of the main display in screen coordinates (pixels).
     ///
     /// # Example
     ///
@@ -172,11 +156,10 @@ impl Enigo {
     /// use enigo::*;
     /// let mut size = Enigo::main_display_size();
     /// ```
-    #[must_use]
     pub fn main_display_size() -> (usize, usize) {
-        let w = unsafe { GetSystemMetrics(SM_CXSCREEN) as usize };
-        let h = unsafe { GetSystemMetrics(SM_CYSCREEN) as usize };
-        (w, h)
+      let w = unsafe { GetSystemMetrics(SM_CXSCREEN) as usize };
+      let h = unsafe { GetSystemMetrics(SM_CYSCREEN) as usize };
+      (w, h)
     }
 
     /// Gets the location of mouse in screen coordinates (pixels).
@@ -187,29 +170,27 @@ impl Enigo {
     /// use enigo::*;
     /// let mut location = Enigo::mouse_location();
     /// ```
-    #[must_use]
     pub fn mouse_location() -> (i32, i32) {
         let mut point = POINT { x: 0, y: 0 };
         let result = unsafe { GetCursorPos(&mut point) };
-        if result == 0 {
-            (0, 0)
+        if result != 0 {
+          (point.x, point.y)
         } else {
-            (point.x, point.y)
+          (0, 0)
         }
     }
 
     fn unicode_key_click(&self, unicode_char: u16) {
+        use std::{thread, time};
         self.unicode_key_down(unicode_char);
         thread::sleep(time::Duration::from_millis(20));
         self.unicode_key_up(unicode_char);
     }
 
-    #[allow(clippy::unused_self)]
     fn unicode_key_down(&self, unicode_char: u16) {
         keybd_event(KEYEVENTF_UNICODE, 0, unicode_char);
     }
 
-    #[allow(clippy::unused_self)]
     fn unicode_key_up(&self, unicode_char: u16) {
         keybd_event(KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, unicode_char);
     }
@@ -219,10 +200,10 @@ impl Enigo {
         // wrongly typed with i32 instead of i16 use the
         // ones provided by win/keycodes.rs that are prefixed
         // with an 'E' infront of the original name
-
+        #[allow(deprecated)]
         // I mean duh, we still need to support deprecated keys until they're removed
         match key {
-            Key::Alt | Key::Option => EVK_MENU,
+            Key::Alt => EVK_MENU,
             Key::Backspace => EVK_BACK,
             Key::CapsLock => EVK_CAPITAL,
             Key::Control => EVK_LCONTROL,
@@ -231,9 +212,6 @@ impl Enigo {
             Key::End => EVK_END,
             Key::Escape => EVK_ESCAPE,
             Key::F1 => EVK_F1,
-            Key::F10 => EVK_F10,
-            Key::F11 => EVK_F11,
-            Key::F12 => EVK_F12,
             Key::F2 => EVK_F2,
             Key::F3 => EVK_F3,
             Key::F4 => EVK_F4,
@@ -242,8 +220,20 @@ impl Enigo {
             Key::F7 => EVK_F7,
             Key::F8 => EVK_F8,
             Key::F9 => EVK_F9,
+            Key::F10 => EVK_F10,
+            Key::F11 => EVK_F11,
+            Key::F12 => EVK_F12,
+            Key::F13 => EVK_F13,
+            Key::F14 => EVK_F14,
+            Key::F15 => EVK_F15,
+            Key::F16 => EVK_F16,
+            Key::F17 => EVK_F17,
+            Key::F18 => EVK_F18,
+            Key::F19 => EVK_F19,
+            Key::F20 => EVK_F20,
             Key::Home => EVK_HOME,
             Key::LeftArrow => EVK_LEFT,
+            Key::Option => EVK_MENU,
             Key::PageDown => EVK_NEXT,
             Key::PageUp => EVK_PRIOR,
             Key::Return => EVK_RETURN,
@@ -252,8 +242,10 @@ impl Enigo {
             Key::Space => EVK_SPACE,
             Key::Tab => EVK_TAB,
             Key::UpArrow => EVK_UP,
+
             Key::Raw(raw_keycode) => raw_keycode,
-            Key::Layout(c) => self.get_layoutdependent_keycode(&c.to_string()),
+            Key::Layout(c) => self.get_layoutdependent_keycode(c.to_string()),
+            //_ => 0,
             Key::Super | Key::Command | Key::Windows | Key::Meta => EVK_LWIN,
         }
     }
@@ -263,14 +255,13 @@ impl Enigo {
         unsafe { MapVirtualKeyW(keycode as u32, 0) as u16 }
     }
 
-    #[allow(clippy::unused_self)]
-    fn get_layoutdependent_keycode(&self, string: &str) -> u16 {
+    fn get_layoutdependent_keycode(&self, string: String) -> u16 {
         let mut buffer = [0; 2];
         // get the first char from the string ignore the rest
         // ensure its not a multybyte char
         let utf16 = string
             .chars()
-            .next()
+            .nth(0)
             .expect("no valid input") //TODO(dustin): no panic here make an error
             .encode_utf16(&mut buffer);
         if utf16.len() != 1 {

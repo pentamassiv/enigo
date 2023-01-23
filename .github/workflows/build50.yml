@@ -14,13 +14,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - "1.58.0"
-          - "1.55.0"
           - "1.50.0"
-          - "1.45.0"
-          - "1.40.0"
-          - "1.35.0"
-          - "1.32.0"
         platform:
           - ubuntu-latest
           - windows-latest

@@ -2,7 +2,6 @@ name: build
 
 on:
   workflow_dispatch:
-  push:
   pull_request:
     branches:
       - main
@@ -11,34 +10,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  compile:
-    strategy:
-      matrix:
-        rust:
-          - stable
-          - nightly
-          - "1.31.0"
-        platform:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ./.github/actions/install_deps
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-      - run: cargo check
-  
   compile_all_features:
     strategy:
       matrix:
         rust:
-          - stable
-          - nightly
-          - "1.31.0"
+          - "1.58.0"
+          - "1.55.0"
+          - "1.50.0"
+          - "1.45.0"
+          - "1.40.0"
+          - "1.35.0"
+          - "1.32.0"
         platform:
           - ubuntu-latest
           - windows-latest

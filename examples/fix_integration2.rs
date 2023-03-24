@@ -18,5 +18,13 @@ fn main() {
     enigo.mouse_click(MouseButton::Left);
     thread::sleep(wait_time);
 
+    enigo.key_down(Key::Control);
+    enigo.key_down(Key::Layout('f'));
+    thread::sleep(Duration::from_millis(10));
+    enigo.key_up(Key::Layout('f'));
+    enigo.key_up(Key::Control);
+
+    enigo.key_sequence("Search for something!");
+
     println!("mouse location: {:?}", enigo.mouse_location());
 }

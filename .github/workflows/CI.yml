@@ -69,25 +69,41 @@ jobs:
       - name: Build the examples with all features enabled
         run: cargo build --examples --all-features
 
-      - uses: OrbitalOwen/desktop-screenshot-action@0.1
-        if: runner.os != 'Linux'
+      - name: Take screenshot
+        uses: ./.github/actions/screenshot
         with:
-          file-name: '${{ matrix.platform }}_${{ matrix.rust }}_desktop_before.jpg'
-        
+          step: before
+          rust: ${{ matrix.rust }}
+          platform: ${{ matrix.platform }}
+      
       - name: Run integration tests
         run: cargo test integration --all-features -- --test-threads=1 --include-ignored --nocapture
      
-      - uses: OrbitalOwen/desktop-screenshot-action@0.1
-        if: runner.os != 'Linux'
+      - name: Take screenshot
+        if: always() 
+        uses: ./.github/actions/screenshot
         with:
-          file-name: '${{ matrix.platform }}_${{ matrix.rust }}_desktop_during.jpg'
+          step: during
+          rust: ${{ matrix.rust }}
+          platform: ${{ matrix.platform }}
 
       - name: Do something after the integration tests
-        if: always() && runner.os == 'Windows'
+        if: always()
         run: cargo run --example fix_integration2
 
-      - uses: OrbitalOwen/desktop-screenshot-action@0.1
-        if: runner.os != 'Linux'
+      - name: Take screenshot
+        if: always()
+        uses: ./.github/actions/screenshot
         with:
-          file-name: '${{ matrix.platform }}_${{ matrix.rust }}_desktop_after.jpg'
+          step: after
+          rust: ${{ matrix.rust }}
+          platform: ${{ matrix.platform }}
 
+      # Delete duplicate artifacts
+      - uses: geekyeggo/delete-artifact@v2
+        if: always()
+        with:
+          name: |
+            ${{ matrix.platform }}_${{ matrix.rust }}_desktop_before.jpg
+            ${{ matrix.platform }}_${{ matrix.rust }}_desktop_during.jpg
+            ${{ matrix.platform }}_${{ matrix.rust }}_desktop_after.jpg

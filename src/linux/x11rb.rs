@@ -38,6 +38,7 @@ impl From<std::io::Error> for X11Error {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct EnigoX11 {
     connection: RustConnection<DefaultStream>,
     delay: u32,

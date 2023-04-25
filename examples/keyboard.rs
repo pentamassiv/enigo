@@ -8,6 +8,7 @@ fn main() {
 
     // write text
     enigo.key_sequence("Hello World! here is a lot of text  ❤️");
+    enigo.key_sequence("💣💩🔥");
 
     // select all
     enigo.key_down(Key::Control);

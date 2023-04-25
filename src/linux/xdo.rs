@@ -76,6 +76,7 @@ fn mousebutton(button: MouseButton) -> c_int {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 /// The main struct for handling the event emitting
 pub struct EnigoX11 {
     xdo: Xdo,

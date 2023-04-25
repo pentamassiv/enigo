@@ -2,10 +2,17 @@ use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 #[cfg_attr(feature = "x11rb", path = "x11rb.rs")]
 #[cfg_attr(not(feature = "x11rb"), path = "xdo.rs")]
-mod x11_impl;
-use self::x11_impl::EnigoX11;
+mod x11;
+use self::x11::EnigoX11;
+
+#[cfg(feature = "wayland")]
+pub mod wayland;
+#[cfg(feature = "wayland")]
+use self::wayland::WaylandConnection;
 
 pub struct Enigo {
+    #[cfg(feature = "wayland")]
+    wayland: Option<WaylandConnection>,
     x11: Option<EnigoX11>,
 }
 
@@ -25,10 +32,16 @@ impl Enigo {
 }
 
 impl Default for Enigo {
-    /// Create a new `EnigoX11` instance
+    /// Create a new `Enigo` instance
     fn default() -> Self {
+        #[cfg(feature = "wayland")]
+        let wayland = WaylandConnection::new().ok();
         let x11 = Some(EnigoX11::default());
-        Self { x11 }
+        Self {
+            #[cfg(feature = "wayland")]
+            wayland,
+            x11,
+        }
     }
 }
 
@@ -64,15 +77,23 @@ impl MouseControllable for Enigo {
 
 impl KeyboardControllable for Enigo {
     fn key_sequence(&mut self, sequence: &str) {
+        #[cfg(feature = "wayland")]
+        self.wayland.as_mut().unwrap().key_sequence(sequence);
         self.x11.as_mut().unwrap().key_sequence(sequence);
     }
     fn key_down(&mut self, key: Key) {
+        #[cfg(feature = "wayland")]
+        self.wayland.as_mut().unwrap().key_down(key);
         self.x11.as_mut().unwrap().key_down(key);
     }
     fn key_up(&mut self, key: Key) {
+        #[cfg(feature = "wayland")]
+        self.wayland.as_mut().unwrap().key_up(key);
         self.x11.as_mut().unwrap().key_up(key);
     }
     fn key_click(&mut self, key: Key) {
+        #[cfg(feature = "wayland")]
+        self.wayland.as_mut().unwrap().key_click(key);
         self.x11.as_mut().unwrap().key_click(key);
     }
 }

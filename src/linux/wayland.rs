@@ -97,25 +97,83 @@ impl std::fmt::Debug for KeyMap {
     }
 }
 
-pub struct Keymap {
-    keysym_lookup: HashMap<char, KeyMap>, // UTF-8 -> (keysym, keycode, refcount)
-    unused_keycodes: VecDeque<u32>,       // Used to keep track of unused keycodes
+pub struct WaylandConnection {
+    _conn: Connection,
+    event_queue: EventQueue<VirtKbdState>,
+    state: VirtKbdState,
+    virtual_keyboard: zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
+    keymap: HashMap<char, KeyMap>, // UTF-8 -> (keysym, keycode, refcount)
+    unused_keycodes: VecDeque<u32>, // Used to keep track of unused keycodes
+    held: Vec<char>,
+    base_time: std::time::Instant,
 }
 
-impl Keymap {
-    #[must_use]
-    pub fn new() -> Keymap {
+impl WaylandConnection {
+    /// Tries to establish a new Wayland connection
+    ///
+    /// # Errors
+    /// TODO
+    pub fn new() -> Result<WaylandConnection, DisplayOutputError> {
+        let held = Vec::with_capacity(255 - 7);
+
+        // Setup Wayland Connection
+        let conn = Connection::connect_to_env();
+
+        // Make sure we made a connection
+        let conn = match conn {
+            Ok(conn) => conn,
+            Err(e) => {
+                // error!("Failed to connect to Wayland");
+                return Err(DisplayOutputError::Connection(e.to_string()));
+            }
+        };
+
+        // Check to see if there was an error trying to connect
+        if let Some(err) = conn.protocol_error() {
+            //  error!(
+            //     "Unknown Wayland initialization failure: {} {} {} {}",
+            //      err.code, err.object_id, err.object_interface, err.message
+            // );
+            return Err(DisplayOutputError::General(err.to_string()));
+        }
+
+        // Create the event queue
+        let mut event_queue = conn.new_event_queue();
+        // Get queue handle
+        let qh = event_queue.handle();
+
+        // Start registry
+        let display = conn.display();
+        display.get_registry(&qh, ());
+
+        // Dispatch events so we can setup a virtual keyboard
+        // This requires a wl_seat and zwp_virtual_keyboard_manager_v1
+        let mut state = VirtKbdState::new();
+        event_queue.roundtrip(&mut state).unwrap();
+
+        // Setup Virtual Keyboard
+        let seat = state.seat.as_ref().unwrap();
+        let vk_mgr = state.keyboard_manager.as_ref().unwrap();
+        let virtual_keyboard = vk_mgr.create_virtual_keyboard(seat, &qh, ());
+
         // Only keycodes from 8 to 255 can be used
-        let keysym_lookup = HashMap::with_capacity(255 - 7);
+        let keymap = HashMap::with_capacity(255 - 7);
         let mut unused_keycodes: VecDeque<u32> = VecDeque::with_capacity(255 - 7); // All keycodes are unused when initialized
         for n in 8..=255 {
             unused_keycodes.push_back(n);
         }
 
-        Keymap {
-            keysym_lookup,
+        let base_time = Instant::now();
+        Ok(WaylandConnection {
+            _conn: conn,
+            event_queue,
+            state,
+            keymap,
             unused_keycodes,
-        }
+            held,
+            base_time,
+            virtual_keyboard,
+        })
     }
 
     /// Generates a single-level keymap.
@@ -412,7 +470,7 @@ impl Keymap {
         xkb_symbols {{"
         )?;
 
-        for (key, val) in &self.keysym_lookup {
+        for (key, val) in &self.keymap {
             match key {
                 '\n' => {
                     write!(
@@ -472,7 +530,7 @@ impl Keymap {
 
         // Increment the reference counters and allocate keycodes
         for c in chars {
-            if let Some(val) = self.keysym_lookup.get_mut(&c) {
+            if let Some(val) = self.keymap.get_mut(&c) {
                 val.refcount += 1;
                 continue;
             }
@@ -480,7 +538,7 @@ impl Keymap {
             let Some(keycode) = self.unused_keycodes.pop_front() else { return Err(DisplayOutputError::AllocationFailed(c)); };
             // Insert keysym and keycode for lookup
             let Some(key) = KeyMap::new(c,keycode) else { return Err(DisplayOutputError::AllocationFailed(c))};
-            self.keysym_lookup.insert(c, key);
+            self.keymap.insert(c, key);
 
             // Trigger a regen of the layout
             regenerate = true;
@@ -507,12 +565,12 @@ impl Keymap {
 
         // Lookup each of the keysyms, decrementing the reference counters
         for c in chars {
-            if let Some(key) = self.keysym_lookup.get_mut(&c) {
+            if let Some(key) = self.keymap.get_mut(&c) {
                 key.refcount -= 1;
                 if key.refcount == 0 {
                     // Add the keycode back to the queue and remove the entry
                     self.unused_keycodes.push_back(key.keycode);
-                    self.keysym_lookup.remove(&c);
+                    self.keymap.remove(&c);
                 }
             }
         }
@@ -521,80 +579,6 @@ impl Keymap {
         // performance increase)
 
         Ok(())
-    }
-}
-
-pub struct WaylandConnection {
-    _conn: Connection,
-    event_queue: EventQueue<VirtKbdState>,
-    state: VirtKbdState,
-    virtual_keyboard: zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
-    held: Vec<char>,
-    keymap: Keymap,
-    base_time: std::time::Instant,
-}
-
-impl WaylandConnection {
-    /// Tries to establish a new Wayland connection
-    ///
-    /// # Errors
-    /// TODO
-    pub fn new() -> Result<WaylandConnection, DisplayOutputError> {
-        let held = Vec::with_capacity(255 - 7);
-
-        // Setup Wayland Connection
-        let conn = Connection::connect_to_env();
-
-        // Make sure we made a connection
-        let conn = match conn {
-            Ok(conn) => conn,
-            Err(e) => {
-                // error!("Failed to connect to Wayland");
-                return Err(DisplayOutputError::Connection(e.to_string()));
-            }
-        };
-
-        // Check to see if there was an error trying to connect
-        if let Some(err) = conn.protocol_error() {
-            //  error!(
-            //     "Unknown Wayland initialization failure: {} {} {} {}",
-            //      err.code, err.object_id, err.object_interface, err.message
-            // );
-            return Err(DisplayOutputError::General(err.to_string()));
-        }
-
-        // Create the event queue
-        let mut event_queue = conn.new_event_queue();
-        // Get queue handle
-        let qh = event_queue.handle();
-
-        // Start registry
-        let display = conn.display();
-        display.get_registry(&qh, ());
-
-        // Dispatch events so we can setup a virtual keyboard
-        // This requires a wl_seat and zwp_virtual_keyboard_manager_v1
-        let mut state = VirtKbdState::new();
-        event_queue.roundtrip(&mut state).unwrap();
-
-        // Setup Virtual Keyboard
-        let seat = state.seat.as_ref().unwrap();
-        let vk_mgr = state.keyboard_manager.as_ref().unwrap();
-        let virtual_keyboard = vk_mgr.create_virtual_keyboard(seat, &qh, ());
-
-        // Setup Keymap
-        let keymap = Keymap::new();
-
-        let base_time = Instant::now();
-        Ok(WaylandConnection {
-            _conn: conn,
-            event_queue,
-            state,
-            held,
-            keymap,
-            base_time,
-            virtual_keyboard,
-        })
     }
 
     /// Used to apply ms timestamps for Wayland key events
@@ -648,7 +632,7 @@ impl WaylandConnection {
         }
 
         if press {
-            if let Ok(Some(layout)) = self.keymap.add(c.to_string().chars()) {
+            if let Ok(Some(layout)) = self.add(c.to_string().chars()) {
                 let _ = self.apply_layout(&layout);
             }
             self.press_key(c, true)?;
@@ -659,7 +643,7 @@ impl WaylandConnection {
                 .iter()
                 .position(|&x| x == c)
                 .map(|e| self.held.remove(e));
-            self.keymap.remove(c.to_string().chars())?;
+            self.remove(c.to_string().chars())?;
         }
 
         Ok(())
@@ -675,7 +659,7 @@ impl WaylandConnection {
     pub fn press_key(&mut self, c: char, press: bool) -> Result<(), DisplayOutputError> {
         let time = self.get_time();
         let state = u32::from(press);
-        let  Some(&KeyMap{mut keycode,..}) = self.keymap.keysym_lookup.get(&c) else { return Err(DisplayOutputError::NoKeycode); };
+        let  Some(&KeyMap{mut keycode,..}) = self.keymap.get(&c) else { return Err(DisplayOutputError::NoKeycode); };
         keycode -= 8; // Adjust by 8 due to the xkb/xwayland requirements
 
         // debug!("time:{} keycode:{}:{} state:{}", time, c, keycode, state);
@@ -696,7 +680,7 @@ impl WaylandConnection {
     /// TODO
     pub fn click_key(&mut self, c: char) -> Result<(), DisplayOutputError> {
         let time = self.get_time();
-        let  Some(&KeyMap{mut keycode,..}) = self.keymap.keysym_lookup.get(&c) else { return Err(DisplayOutputError::NoKeycode); };
+        let  Some(&KeyMap{mut keycode,..}) = self.keymap.get(&c) else { return Err(DisplayOutputError::NoKeycode); };
         keycode -= 8; // Adjust by 8 due to the xkb/xwayland requirements
 
         // debug!("time:{} keycode:{}:{}", time, c, keycode);
@@ -714,7 +698,7 @@ impl Drop for WaylandConnection {
         let held_keys = self.held.clone();
         for c in &held_keys {
             self.press_key(*c, false).unwrap();
-            self.keymap.remove(c.to_string().chars()).unwrap();
+            self.remove(c.to_string().chars()).unwrap();
         }
     }
 }
@@ -726,7 +710,7 @@ impl KeyboardControllable for WaylandConnection {
     /// some issues with this case due to the layout switching)
     fn key_sequence(&mut self, string: &str) {
         // Allocate keysyms to virtual keyboard layout
-        if let Ok(Some(layout)) = self.keymap.add(string.chars()) {
+        if let Ok(Some(layout)) = self.add(string.chars()) {
             let _ = self.apply_layout(&layout);
         }
 
@@ -738,7 +722,7 @@ impl KeyboardControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
 
         // Deallocate keysyms in virtual keyboard layout
-        self.keymap.remove(string.chars()).unwrap();
+        self.remove(string.chars()).unwrap();
     }
 
     fn key_down(&mut self, key: crate::Key) {

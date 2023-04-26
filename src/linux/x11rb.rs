@@ -43,7 +43,7 @@ pub struct EnigoX11 {
     connection: RustConnection<DefaultStream>,
     delay: u32,
     screen: Screen,
-    charmap: HashMap<Keysym, u8>,
+    keymap: HashMap<Keysym, u8>,
     unused_keycodes: VecDeque<u8>,
     held: Vec<Key>,                               // Currently held keys
     last_keys: Vec<u8>,                           // Last pressed keycodes
@@ -65,7 +65,7 @@ impl EnigoX11 {
         let screen = setup.roots[screen_idx].clone();
         let min_keycode = setup.min_keycode;
         let max_keycode = setup.max_keycode;
-        let charmap = HashMap::new();
+        let keymap = HashMap::with_capacity(max_keycode - min_keycode);
         let unused_keycodes = Self::find_unused_keycodes(&connection, min_keycode, max_keycode);
         // Check if a mapping is possible
         assert!(
@@ -80,7 +80,7 @@ impl EnigoX11 {
             connection,
             delay,
             screen,
-            charmap,
+            keymap,
             unused_keycodes,
             held,
             last_keys,
@@ -132,8 +132,8 @@ impl EnigoX11 {
     }
 
     fn get_keycode(&mut self, keysym: Keysym) -> Result<u8, X11Error> {
-        if let Some(keycode) = self.charmap.get(&keysym) {
-            // The keysym is already mapped and cached in the charmap
+        if let Some(keycode) = self.keymap.get(&keysym) {
+            // The keysym is already mapped and cached in the keymap
             Ok(*keycode)
         } else {
             // The keysym needs to get mapped to an unused keycode
@@ -249,7 +249,7 @@ impl EnigoX11 {
                 println!("keycode:{unused_keycode}");
 
                 self.bind_key(unused_keycode, keysym);
-                self.charmap.insert(keysym, unused_keycode);
+                self.keymap.insert(keysym, unused_keycode);
                 Ok(unused_keycode)
             }
             // All keycodes are being used. A mapping is not possible
@@ -259,10 +259,10 @@ impl EnigoX11 {
 
     // Map the the given keycode to the NoSymbol keysym so it can get reused
     fn unmap_sym(&mut self, keysym: Keysym) {
-        if let Some(&keycode) = self.charmap.get(&keysym) {
+        if let Some(&keycode) = self.keymap.get(&keysym) {
             self.bind_key(keycode, KEY_NoSymbol);
             self.unused_keycodes.push_back(keycode);
-            self.charmap.remove(&keysym);
+            self.keymap.remove(&keysym);
         }
     }
 
@@ -353,7 +353,7 @@ impl EnigoX11 {
         // Unmap all keys, if all keycodes are already being used
         // TODO: Don't unmap the keycodes if they will be needed next
         if self.unused_keycodes.is_empty() {
-            let mapped_keys = self.charmap.clone();
+            let mapped_keys = self.keymap.clone();
             for &sym in mapped_keys.keys() {
                 self.unmap_sym(sym);
             }
@@ -451,7 +451,7 @@ impl Drop for EnigoX11 {
         for c in &self.held.clone() {
             self.press_key(*c, Some(false));
         }
-        for &keycode in self.charmap.values() {
+        for &keycode in self.keymap.values() {
             // Map the the given keycode
             // to the NoSymbol keysym so
             // it can get reused

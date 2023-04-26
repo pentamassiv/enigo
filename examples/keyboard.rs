@@ -11,7 +11,7 @@ fn main() {
     enigo.key_sequence("💣💩🔥");
 
     // select all
-    enigo.key_down(Key::Control);
+    enigo.key_down(Key::Return);
     enigo.key_click(Key::Layout('a'));
-    enigo.key_up(Key::Control);
+    enigo.key_up(Key::Return);
 }

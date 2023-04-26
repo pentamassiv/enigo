@@ -10,7 +10,7 @@ use x11rb::protocol::{
 use x11rb::rust_connection::{DefaultStream, RustConnection};
 use x11rb::{connection::Connection, wrapper::ConnectionExt as _};
 
-use xkbcommon::xkb::{keysym_from_name, keysyms, KEY_NoSymbol, Keysym, KEYSYM_NO_FLAGS};
+use xkbcommon::xkb::{keysym_from_name, keysyms, KEY_NoSymbol, KEYSYM_NO_FLAGS};
 
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
@@ -38,15 +38,18 @@ impl From<std::io::Error> for X11Error {
     }
 }
 
+type Keysym = u32;
+type Keycode = u8;
+
 #[allow(clippy::module_name_repetitions)]
 pub struct EnigoX11 {
     connection: RustConnection<DefaultStream>,
     delay: u32,
     screen: Screen,
-    keymap: HashMap<Keysym, u8>,
-    unused_keycodes: VecDeque<u8>,
+    keymap: HashMap<Keysym, Keycode>,
+    unused_keycodes: VecDeque<Keycode>,
     held: Vec<Key>,                               // Currently held keys
-    last_keys: Vec<u8>,                           // Last pressed keycodes
+    last_keys: Vec<Keycode>,                      // Last pressed keycodes
     last_event_before_delays: std::time::Instant, // Time of the last event
     pending_delays: u32,
 }
@@ -65,7 +68,7 @@ impl EnigoX11 {
         let screen = setup.roots[screen_idx].clone();
         let min_keycode = setup.min_keycode;
         let max_keycode = setup.max_keycode;
-        let keymap = HashMap::with_capacity(max_keycode - min_keycode);
+        let keymap = HashMap::with_capacity((max_keycode - min_keycode) as usize);
         let unused_keycodes = Self::find_unused_keycodes(&connection, min_keycode, max_keycode);
         // Check if a mapping is possible
         assert!(
@@ -104,10 +107,10 @@ impl EnigoX11 {
 
     fn find_unused_keycodes(
         connection: &RustConnection<DefaultStream>,
-        keycode_min: u8,
-        keycode_max: u8,
-    ) -> VecDeque<u8> {
-        let mut unused_keycodes: VecDeque<u8> =
+        keycode_min: Keycode,
+        keycode_max: Keycode,
+    ) -> VecDeque<Keycode> {
+        let mut unused_keycodes: VecDeque<Keycode> =
             VecDeque::with_capacity((keycode_max - keycode_min) as usize);
 
         let GetKeyboardMappingReply {
@@ -131,7 +134,7 @@ impl EnigoX11 {
         unused_keycodes
     }
 
-    fn get_keycode(&mut self, keysym: Keysym) -> Result<u8, X11Error> {
+    fn get_keycode(&mut self, keysym: Keysym) -> Result<Keycode, X11Error> {
         if let Some(keycode) = self.keymap.get(&keysym) {
             // The keysym is already mapped and cached in the keymap
             Ok(*keycode)
@@ -240,7 +243,7 @@ impl EnigoX11 {
         }
     }
 
-    fn map_sym(&mut self, keysym: Keysym) -> Result<u8, X11Error> {
+    fn map_sym(&mut self, keysym: Keysym) -> Result<Keycode, X11Error> {
         match self.unused_keycodes.pop_front() {
             // A keycode is unused so a mapping is possible
             Some(unused_keycode) => {
@@ -271,7 +274,7 @@ impl EnigoX11 {
     // overwritten
     // If the keycode is mapped to the NoSymbol keysym, the key is unbinded and can
     // get used again later
-    fn bind_key(&self, keycode: u8, keysym: Keysym) {
+    fn bind_key(&self, keycode: Keycode, keysym: Keysym) {
         // A list of two keycodes has to be mapped, otherwise the map is not what would
         // be expected If we would try to map only one keysym, we would get a
         // map that is tolower(keysym), toupper(keysym), tolower(keysym),
@@ -286,7 +289,7 @@ impl EnigoX11 {
     // Update the delay
     // TODO: A delay of 1 ms in all cases seems to work on my machine. Maybe this is
     // not needed?
-    fn update_delays(&mut self, keycode: u8) {
+    fn update_delays(&mut self, keycode: Keycode) {
         // Check if a delay is needed
         // A delay is required, if one of the keycodes was recently entered and there
         // was no delay between it
@@ -312,7 +315,7 @@ impl EnigoX11 {
     }
 
     // Sends a key event to the X11 server via XTest extension
-    fn send_key_event(&mut self, keycode: u8, press: bool) {
+    fn send_key_event(&mut self, keycode: Keycode, press: bool) {
         let type_ = if press {
             x11rb::protocol::xproto::KEY_PRESS_EVENT
         } else {
@@ -340,10 +343,10 @@ impl EnigoX11 {
         self.last_event_before_delays = std::time::Instant::now();
     }
 
-    // Try to enter the char
-    // If press is None, it is assumed that the char is pressed and released
-    // If press is true, the key that enters the 'c' is pressed
-    // Otherwise the corresponding key is released
+    // Try to enter the key
+    // If press is None, it is assumed that the key is pressed and released
+    // If press is true, the key is pressed
+    // Otherwise the key is released
     fn press_key(&mut self, key: Key, press: Option<bool>) {
         // Nothing to do
         if key == Key::Layout('\0') {
@@ -352,6 +355,7 @@ impl EnigoX11 {
 
         // Unmap all keys, if all keycodes are already being used
         // TODO: Don't unmap the keycodes if they will be needed next
+        // TODO: Don't unmap held keys!
         if self.unused_keycodes.is_empty() {
             let mapped_keys = self.keymap.clone();
             for &sym in mapped_keys.keys() {
@@ -359,12 +363,12 @@ impl EnigoX11 {
             }
         }
 
-        let (sym, keycode) = if let Key::Raw(kc) = key {
-            (None, kc.try_into().unwrap())
+        let keycode = if let Key::Raw(kc) = key {
+            kc.try_into().unwrap()
         } else {
             let sym = Self::key_to_keysym(key);
             let keycode = self.get_keycode(sym).unwrap();
-            (Some(sym), keycode)
+            keycode
         };
 
         match press {
@@ -382,16 +386,16 @@ impl EnigoX11 {
                 // self.update_delays(keycode); TODO: Check if releases really don't need a
                 // delay
                 self.send_key_event(keycode, false);
-                if let Some(s) = sym {
-                    self.unmap_sym(s);
-                }
+                // if let Some(s) = sym {
+                //    self.unmap_sym(s);
+                // }
                 self.held.retain(|&k| k != key);
             }
         }
     }
 
     // Sends a button event to the X11 server via XTest extension
-    fn press_mouse(&self, button: MouseButton, press: bool, delay: u32) {
+    fn send_mouse_button_event(&self, button: MouseButton, press: bool, delay: u32) {
         let type_ = if press {
             x11rb::protocol::xproto::BUTTON_PRESS_EVENT
         } else {
@@ -420,7 +424,7 @@ impl EnigoX11 {
 
     // Sends a motion notify event to the X11 server via XTest extension
     // TODO: Check if using x11rb::protocol::xproto::warp_pointer would be better
-    fn move_mouse(&self, x: i32, y: i32, relative: bool) {
+    fn send_motion_notify_event(&self, x: i32, y: i32, relative: bool) {
         let type_ = x11rb::protocol::xproto::MOTION_NOTIFY_EVENT;
         // TRUE -> relative coordinates
         // FALSE -> absolute coordinates
@@ -483,24 +487,24 @@ impl KeyboardControllable for EnigoX11 {
 
 impl MouseControllable for EnigoX11 {
     fn mouse_move_to(&mut self, x: i32, y: i32) {
-        self.move_mouse(x, y, false);
+        self.send_motion_notify_event(x, y, false);
     }
 
     fn mouse_move_relative(&mut self, x: i32, y: i32) {
-        self.move_mouse(x, y, true);
+        self.send_motion_notify_event(x, y, true);
     }
 
     fn mouse_down(&mut self, button: MouseButton) {
-        self.press_mouse(button, true, 1);
+        self.send_mouse_button_event(button, true, 1);
     }
 
     fn mouse_up(&mut self, button: MouseButton) {
-        self.press_mouse(button, false, 1);
+        self.send_mouse_button_event(button, false, 1);
     }
 
     fn mouse_click(&mut self, button: MouseButton) {
-        self.press_mouse(button, true, 1);
-        self.press_mouse(button, false, DEFAULT_DELAY);
+        self.send_mouse_button_event(button, true, 1);
+        self.send_mouse_button_event(button, false, DEFAULT_DELAY);
     }
 
     fn mouse_scroll_x(&mut self, length: i32) {

@@ -14,11 +14,13 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1, zwp_virtual_keyboard_v1,
 };
 
-use crate::KeyboardControllable;
+use xkbcommon::xkb::{keysym_from_name, keysym_get_name, keysyms, KEYSYM_NO_FLAGS};
+
+use crate::{Key, KeyboardControllable};
 
 #[derive(Debug)]
 pub enum DisplayOutputError {
-    AllocationFailed(char),
+    MappingFailed(Keysym),
     Connection(String),
     Format(std::io::Error),
     General(String),
@@ -32,7 +34,7 @@ pub enum DisplayOutputError {
 impl std::fmt::Display for DisplayOutputError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DisplayOutputError::AllocationFailed(e) => write!(f, "Allocation failed: {e}"),
+            DisplayOutputError::MappingFailed(e) => write!(f, "Allocation failed: {e}"),
             DisplayOutputError::Connection(e) => write!(f, "Connection: {e}"),
             DisplayOutputError::Format(e) => write!(f, "Format: {e}"),
             DisplayOutputError::General(e) => write!(f, "General: {e}"),
@@ -51,60 +53,18 @@ impl From<std::io::Error> for DisplayOutputError {
     }
 }
 
-pub struct KeyMap {
-    pub keysym: xkbcommon::xkb::Keysym,
-    pub keycode: u32,
-    pub refcount: u32,
-}
-
-impl KeyMap {
-    #[must_use]
-    /// Lookup keysym for a UTF-8 symbol
-    /// \n and \t are special symbols for Return and Tab respectively
-    pub fn new(c: char, keycode: u32) -> Option<Self> {
-        // Special character lookup, otherwise normal lookup
-        let keysym = match c {
-            '\n' => xkbcommon::xkb::keysyms::KEY_Return,
-            '\t' => xkbcommon::xkb::keysyms::KEY_Tab,
-            _ => {
-                // Convert UTF-8 to a code point first to do the keysym lookup
-                let codepoint = format!("U{:X}", c as u32);
-                xkbcommon::xkb::keysym_from_name(&codepoint, xkbcommon::xkb::KEYSYM_NO_FLAGS)
-            }
-        };
-        // trace!("{} {:04X} -> U{:04X}", c, c as u32, keysym);
-
-        // Make sure the keysym is valid
-        if keysym == xkbcommon::xkb::keysyms::KEY_NoSymbol {
-            None
-        } else {
-            Some(KeyMap {
-                keysym,
-                keycode,
-                refcount: 1,
-            })
-        }
-    }
-}
-
-impl std::fmt::Debug for KeyMap {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "keysym:{} keycode:{} refcount:{}",
-            self.keysym, self.keycode, self.refcount
-        )
-    }
-}
+type Keysym = u32;
+type Keycode = u32;
 
 pub struct WaylandConnection {
     _conn: Connection,
-    event_queue: EventQueue<VirtKbdState>,
-    state: VirtKbdState,
+    event_queue: EventQueue<VKState>,
+    state: VKState,
     virtual_keyboard: zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
-    keymap: HashMap<char, KeyMap>, // UTF-8 -> (keysym, keycode, refcount)
-    unused_keycodes: VecDeque<u32>, // Used to keep track of unused keycodes
-    held: Vec<char>,
+    keymap: HashMap<Keysym, Keycode>, // UTF-8 -> (keysym, keycode, refcount)
+    unused_keycodes: VecDeque<Keycode>, // Used to keep track of unused keycodes
+    needs_regeneration: bool,
+    held: Vec<Key>,
     base_time: std::time::Instant,
 }
 
@@ -114,12 +74,8 @@ impl WaylandConnection {
     /// # Errors
     /// TODO
     pub fn new() -> Result<WaylandConnection, DisplayOutputError> {
-        let held = Vec::with_capacity(255 - 7);
-
         // Setup Wayland Connection
         let conn = Connection::connect_to_env();
-
-        // Make sure we made a connection
         let conn = match conn {
             Ok(conn) => conn,
             Err(e) => {
@@ -146,9 +102,8 @@ impl WaylandConnection {
         let display = conn.display();
         display.get_registry(&qh, ());
 
-        // Dispatch events so we can setup a virtual keyboard
-        // This requires a wl_seat and zwp_virtual_keyboard_manager_v1
-        let mut state = VirtKbdState::new();
+        // Setup VKState and dispatch events
+        let mut state = VKState::new();
         event_queue.roundtrip(&mut state).unwrap();
 
         // Setup Virtual Keyboard
@@ -158,11 +113,12 @@ impl WaylandConnection {
 
         // Only keycodes from 8 to 255 can be used
         let keymap = HashMap::with_capacity(255 - 7);
-        let mut unused_keycodes: VecDeque<u32> = VecDeque::with_capacity(255 - 7); // All keycodes are unused when initialized
+        let mut unused_keycodes: VecDeque<Keycode> = VecDeque::with_capacity(255 - 7); // All keycodes are unused when initialized
         for n in 8..=255 {
             unused_keycodes.push_back(n);
         }
-
+        let needs_regeneration = true;
+        let held = Vec::with_capacity(255 - 7);
         let base_time = Instant::now();
         Ok(WaylandConnection {
             _conn: conn,
@@ -170,6 +126,7 @@ impl WaylandConnection {
             state,
             keymap,
             unused_keycodes,
+            needs_regeneration,
             held,
             base_time,
             virtual_keyboard,
@@ -469,42 +426,15 @@ impl WaylandConnection {
         }};
         xkb_symbols {{"
         )?;
-
-        for (key, val) in &self.keymap {
-            match key {
-                '\n' => {
-                    write!(
-                        buf,
-                        "
-            key <I{}> {{ [ Return ] }}; // \\n",
-                        val.keycode,
-                    )?;
-                }
-                '\t' => {
-                    write!(
-                        buf,
-                        "
-            key <I{}> {{ [ Tab ] }}; // \\t",
-                        val.keycode,
-                    )?;
-                }
-                _ => {
-                    write!(
-                        buf,
-                        "
-            key <I{}> {{ [ U{:X} ] }}; // {}",
-                        val.keycode,
-                        val.keysym & 0x1F_FFFF, /* XXX (HaaTa): I suspect there's a UTF-8 ->
-                                                 * Keysym incompatibility for higher orders */
-                        //              this mask seems allow mappings to work
-                        //              correctly but I don't think it's correct.
-                        // Might be related to: https://docs.rs/xkbcommon/0.4.0/xkbcommon/xkb/type.Keysym.html
-                        key,
-                    )?;
-                }
-            }
+        for (&keysym, &keycode) in &self.keymap {
+            write!(
+                buf,
+                "
+            key <I{}> {{ [ {} ] }}; // \\n",
+                keycode,
+                keysym_get_name(keysym)
+            )?;
         }
-
         writeln!(
             buf,
             "
@@ -516,69 +446,139 @@ impl WaylandConnection {
         String::from_utf8(buf).map_err(DisplayOutputError::Utf)
     }
 
-    /// Adds UTF-8 symbols to be added to the virtual keyboard.
-    /// If the keymap needs to be regenerated, it returns the new string. If any
-    /// of the symbols could not be mapped, none of the symbols will be mapped.
-    /// Increments a reference counter if the symbol has already been
-    /// added.
-    ///
-    /// # Errors
-    /// TODO
-    pub fn add(&mut self, chars: std::str::Chars) -> Result<Option<String>, DisplayOutputError> {
-        let mut regenerate = false;
-        // trace!("add({:?})", chars);
-
-        // Increment the reference counters and allocate keycodes
-        for c in chars {
-            if let Some(val) = self.keymap.get_mut(&c) {
-                val.refcount += 1;
-                continue;
-            }
-            // Allocate keycode
-            let Some(keycode) = self.unused_keycodes.pop_front() else { return Err(DisplayOutputError::AllocationFailed(c)); };
-            // Insert keysym and keycode for lookup
-            let Some(key) = KeyMap::new(c,keycode) else { return Err(DisplayOutputError::AllocationFailed(c))};
-            self.keymap.insert(c, key);
-
-            // Trigger a regen of the layout
-            regenerate = true;
-        }
-
-        // Return the new keymap
-        if regenerate {
-            // trace!("add({:?}) regenerate {}", chars, layout);
-            Ok(Some(self.generate_keymap_string()?))
+    fn get_keycode(&mut self, keysym: Keysym) -> Result<Keycode, DisplayOutputError> {
+        if let Some(keycode) = self.keymap.get(&keysym) {
+            // The keysym is already mapped and cached in the keymap
+            Ok(*keycode)
         } else {
-            Ok(None)
+            // The keysym needs to get mapped to an unused keycode
+            self.map_sym(keysym) // Always map the keycode if it has not yet
+                                 // been mapped, so it is layer agnostic
         }
     }
 
-    /// Removes UTF-8 symbols from the virtual keyboard.
-    /// Decrements the reference counter
-    /// If the reference count has reached zero, the keycode is freed and
-    /// removed from the keymap
-    ///
-    /// # Errors
-    /// TODO
-    pub fn remove(&mut self, chars: std::str::Chars) -> Result<(), DisplayOutputError> {
-        // trace!("remove({:?})", chars);
-
-        // Lookup each of the keysyms, decrementing the reference counters
-        for c in chars {
-            if let Some(key) = self.keymap.get_mut(&c) {
-                key.refcount -= 1;
-                if key.refcount == 0 {
-                    // Add the keycode back to the queue and remove the entry
-                    self.unused_keycodes.push_back(key.keycode);
-                    self.keymap.remove(&c);
+    fn key_to_keysym(key: Key) -> Keysym {
+        match key {
+            Key::Layout(c) => match c {
+                '\n' => keysyms::KEY_Return,
+                '\t' => keysyms::KEY_Tab,
+                _ => {
+                    let hex: u32 = c.into();
+                    let name = format!("U{hex:x}");
+                    keysym_from_name(&name, KEYSYM_NO_FLAGS)
                 }
+            },
+            Key::Raw(k) => {
+                // Raw keycodes cannot be converted to keysyms
+                panic!("Attempted to convert raw keycode {k} to keysym");
             }
+            Key::Alt | Key::Option => keysyms::KEY_Alt_L,
+            Key::Backspace => keysyms::KEY_BackSpace,
+            Key::Begin => keysyms::KEY_Begin,
+            Key::Break => keysyms::KEY_Break,
+            Key::Cancel => keysyms::KEY_Cancel,
+            Key::CapsLock => keysyms::KEY_Caps_Lock,
+            Key::Clear => keysyms::KEY_Clear,
+            Key::Control | Key::LControl => keysyms::KEY_Control_L,
+            Key::Delete => keysyms::KEY_Delete,
+            Key::DownArrow => keysyms::KEY_Down,
+            Key::End => keysyms::KEY_End,
+            Key::Escape => keysyms::KEY_Escape,
+            Key::Execute => keysyms::KEY_Execute,
+            Key::F1 => keysyms::KEY_F1,
+            Key::F2 => keysyms::KEY_F2,
+            Key::F3 => keysyms::KEY_F3,
+            Key::F4 => keysyms::KEY_F4,
+            Key::F5 => keysyms::KEY_F5,
+            Key::F6 => keysyms::KEY_F6,
+            Key::F7 => keysyms::KEY_F7,
+            Key::F8 => keysyms::KEY_F8,
+            Key::F9 => keysyms::KEY_F9,
+            Key::F10 => keysyms::KEY_F10,
+            Key::F11 => keysyms::KEY_F11,
+            Key::F12 => keysyms::KEY_F12,
+            Key::F13 => keysyms::KEY_F13,
+            Key::F14 => keysyms::KEY_F14,
+            Key::F15 => keysyms::KEY_F15,
+            Key::F16 => keysyms::KEY_F16,
+            Key::F17 => keysyms::KEY_F17,
+            Key::F18 => keysyms::KEY_F18,
+            Key::F19 => keysyms::KEY_F19,
+            Key::F20 => keysyms::KEY_F20,
+            Key::F21 => keysyms::KEY_F21,
+            Key::F22 => keysyms::KEY_F22,
+            Key::F23 => keysyms::KEY_F23,
+            Key::F24 => keysyms::KEY_F24,
+            Key::F25 => keysyms::KEY_F25,
+            Key::F26 => keysyms::KEY_F26,
+            Key::F27 => keysyms::KEY_F27,
+            Key::F28 => keysyms::KEY_F28,
+            Key::F29 => keysyms::KEY_F29,
+            Key::F30 => keysyms::KEY_F30,
+            Key::F31 => keysyms::KEY_F31,
+            Key::F32 => keysyms::KEY_F32,
+            Key::F33 => keysyms::KEY_F33,
+            Key::F34 => keysyms::KEY_F34,
+            Key::F35 => keysyms::KEY_F35,
+            Key::Find => keysyms::KEY_Find,
+            Key::Hangul => keysyms::KEY_Hangul,
+            Key::Hanja => keysyms::KEY_Hangul_Hanja,
+            Key::Help => keysyms::KEY_Help,
+            Key::Home => keysyms::KEY_Home,
+            Key::Insert => keysyms::KEY_Insert,
+            Key::Kanji => keysyms::KEY_Kanji,
+            Key::LeftArrow => keysyms::KEY_Left,
+            Key::Linefeed => keysyms::KEY_Linefeed,
+            Key::LMenu => keysyms::KEY_Menu,
+            Key::ModeChange => keysyms::KEY_Mode_switch,
+            Key::Numlock => keysyms::KEY_Num_Lock,
+            Key::PageDown => keysyms::KEY_Page_Down,
+            Key::PageUp => keysyms::KEY_Page_Up,
+            Key::Pause => keysyms::KEY_Pause,
+            Key::Print => keysyms::KEY_Print,
+            Key::RControl => keysyms::KEY_Control_R,
+            Key::Redo => keysyms::KEY_Redo,
+            Key::Return => keysyms::KEY_Return,
+            Key::RightArrow => keysyms::KEY_Right,
+            Key::RShift => keysyms::KEY_Shift_R,
+            Key::ScrollLock => keysyms::KEY_Scroll_Lock,
+            Key::Select => keysyms::KEY_Select,
+            Key::ScriptSwitch => keysyms::KEY_script_switch,
+            Key::Shift | Key::LShift => keysyms::KEY_Shift_L,
+            Key::ShiftLock => keysyms::KEY_Shift_Lock,
+            Key::Space => keysyms::KEY_space,
+            Key::SysReq => keysyms::KEY_Sys_Req,
+            Key::Tab => keysyms::KEY_Tab,
+            Key::Undo => keysyms::KEY_Undo,
+            Key::UpArrow => keysyms::KEY_Up,
+            Key::Command | Key::Super | Key::Windows | Key::Meta => keysyms::KEY_Super_L,
         }
+    }
 
-        // No need to regenerate the keymap when something is removed (skip for
-        // performance increase)
+    fn map_sym(&mut self, keysym: Keysym) -> Result<Keycode, DisplayOutputError> {
+        match self.unused_keycodes.pop_front() {
+            // A keycode is unused so a mapping is possible
+            Some(unused_keycode) => {
+                println!("Need to bind:");
+                println!("keysym:{keysym}");
+                println!("keycode:{unused_keycode}");
 
-        Ok(())
+                self.needs_regeneration = true;
+                self.keymap.insert(keysym, unused_keycode);
+                Ok(unused_keycode)
+            }
+            // All keycodes are being used. A mapping is not possible
+            None => Err(DisplayOutputError::MappingFailed(keysym)),
+        }
+    }
+
+    // Map the the given keycode to the NoSymbol keysym so it can get reused
+    fn unmap_sym(&mut self, keysym: Keysym) {
+        if let Some(&keycode) = self.keymap.get(&keysym) {
+            self.needs_regeneration = true;
+            self.unused_keycodes.push_back(keycode);
+            self.keymap.remove(&keysym);
+        }
     }
 
     /// Used to apply ms timestamps for Wayland key events
@@ -595,7 +595,7 @@ impl WaylandConnection {
     ///
     /// # Errors
     /// TODO
-    pub fn apply_layout(&mut self, layout: &str) -> Result<(), DisplayOutputError> {
+    pub fn apply_layout(&mut self, layout: &str) {
         // We need to build a file with a fd in order to pass the layout file to Wayland
         // for processing
         let keymap_size = layout.len();
@@ -618,35 +618,57 @@ impl WaylandConnection {
         let keymap_raw_fd = keymap_file.into_raw_fd();
         self.virtual_keyboard
             .keymap(1, keymap_raw_fd, keymap_size_u32);
-        Ok(())
     }
 
-    /// Press/Release a given UTF-8 symbol
-    /// NOTE: This function does not synchronize the event queue, should be done
-    /// immediately after calling (unless you're trying to optimize
-    /// scheduling).
-    fn press_symbol(&mut self, c: char, press: bool) -> Result<(), DisplayOutputError> {
+    // Try to enter the key
+    // If press is None, it is assumed that the key is pressed and released
+    // If press is true, the key is pressed
+    // Otherwise the key is released
+    fn press_key(&mut self, key: Key, press: Option<bool>) {
         // Nothing to do
-        if c == '\0' {
-            return Ok(());
+        if key == Key::Layout('\0') {
+            return;
         }
 
-        if press {
-            if let Ok(Some(layout)) = self.add(c.to_string().chars()) {
-                let _ = self.apply_layout(&layout);
+        // Unmap all keys, if all keycodes are already being used
+        // TODO: Don't unmap the keycodes if they will be needed next
+        // TODO: Don't unmap held keys!
+        if self.unused_keycodes.is_empty() {
+            let mapped_keys = self.keymap.clone();
+            for &sym in mapped_keys.keys() {
+                self.unmap_sym(sym);
             }
-            self.press_key(c, true)?;
-            self.held.push(c);
-        } else {
-            self.press_key(c, false)?;
-            self.held
-                .iter()
-                .position(|&x| x == c)
-                .map(|e| self.held.remove(e));
-            self.remove(c.to_string().chars())?;
+            self.event_queue.roundtrip(&mut self.state).unwrap();
         }
 
-        Ok(())
+        let keycode = if let Key::Raw(kc) = key {
+            kc.try_into().unwrap()
+        } else {
+            let sym = Self::key_to_keysym(key);
+            let keycode = self.get_keycode(sym).unwrap();
+            keycode
+        };
+
+        if self.needs_regeneration {
+            let keymap = self.generate_keymap_string().unwrap();
+            self.apply_layout(&keymap);
+            self.needs_regeneration = false;
+        }
+
+        match press {
+            None => {
+                self.send_key_event(keycode, true);
+                self.send_key_event(keycode, false);
+            }
+            Some(true) => {
+                self.send_key_event(keycode, true);
+                self.held.push(key);
+            }
+            Some(false) => {
+                self.send_key_event(keycode, false);
+                self.held.retain(|&k| k != key);
+            }
+        }
     }
 
     /// Press/Release a specific UTF-8 symbol
@@ -656,102 +678,66 @@ impl WaylandConnection {
     ///
     /// # Errors
     /// TODO
-    pub fn press_key(&mut self, c: char, press: bool) -> Result<(), DisplayOutputError> {
+    pub fn send_key_event(&mut self, keycode: Keycode, press: bool) {
         let time = self.get_time();
         let state = u32::from(press);
-        let  Some(&KeyMap{mut keycode,..}) = self.keymap.get(&c) else { return Err(DisplayOutputError::NoKeycode); };
-        keycode -= 8; // Adjust by 8 due to the xkb/xwayland requirements
+        let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
 
         // debug!("time:{} keycode:{}:{} state:{}", time, c, keycode, state);
 
         // Send key event message
         self.virtual_keyboard.key(time, keycode, state);
-        Ok(())
-    }
-
-    /// Press then release a specific UTF-8 symbol
-    /// Faster than individual calls to `press_key` as you don't need a delay
-    /// (or sync) between press and release of the same keycode.
-    /// NOTE: This function does not synchronize the event queue, should be done
-    /// immediately after calling (unless you're trying to optimize
-    /// scheduling).
-    ///
-    /// # Errors
-    /// TODO
-    pub fn click_key(&mut self, c: char) -> Result<(), DisplayOutputError> {
-        let time = self.get_time();
-        let  Some(&KeyMap{mut keycode,..}) = self.keymap.get(&c) else { return Err(DisplayOutputError::NoKeycode); };
-        keycode -= 8; // Adjust by 8 due to the xkb/xwayland requirements
-
-        // debug!("time:{} keycode:{}:{}", time, c, keycode);
-
-        // Send key event message
-        self.virtual_keyboard.key(time, keycode, 1);
-        self.virtual_keyboard.key(time, keycode, 0);
-        Ok(())
     }
 }
 
 impl Drop for WaylandConnection {
     fn drop(&mut self) {
-        // warn!("Releasing and unbinding all keys");
-        let held_keys = self.held.clone();
-        for c in &held_keys {
-            self.press_key(*c, false).unwrap();
-            self.remove(c.to_string().chars()).unwrap();
+        for c in &self.held.clone() {
+            self.press_key(*c, Some(false));
         }
+        // This is not needed on wayland with the virtual keyboard protocol,
+        // because we create a new keymap just for this protocol so we don't
+        // care about it's state as soon as we no longer use it
+        // for &keycode in self.keymap.values() {
+        //   // Map the the given keycode
+        //   // to the NoSymbol keysym so
+        //   // it can get reused
+        // self.bind_key(keycode, KEY_NoSymbol);
+        //}
     }
 }
 
 impl KeyboardControllable for WaylandConnection {
-    /// Type the given UTF-8 string using the virtual keyboard
-    /// Should behave nicely even if keys were previously held (those keys will
-    /// continue to be held after sequence is complete, though there may be
-    /// some issues with this case due to the layout switching)
     fn key_sequence(&mut self, string: &str) {
-        // Allocate keysyms to virtual keyboard layout
-        if let Ok(Some(layout)) = self.add(string.chars()) {
-            let _ = self.apply_layout(&layout);
-        }
-
         for c in string.chars() {
-            self.click_key(c).unwrap();
+            self.press_key(Key::Layout(c), None);
         }
-
-        // Pump event queue
         self.event_queue.roundtrip(&mut self.state).unwrap();
-
-        // Deallocate keysyms in virtual keyboard layout
-        self.remove(string.chars()).unwrap();
     }
 
     fn key_down(&mut self, key: crate::Key) {
-        if let crate::Key::Layout(c) = key {
-            let _ = self.press_symbol(c, true); // Pump event queue
-            self.event_queue.roundtrip(&mut self.state).unwrap();
-        }
+        self.press_key(key, Some(true));
+        self.event_queue.roundtrip(&mut self.state).unwrap();
     }
+
     fn key_up(&mut self, key: crate::Key) {
-        if let crate::Key::Layout(c) = key {
-            let _ = self.press_symbol(c, false); // Pump event queue
-            self.event_queue.roundtrip(&mut self.state).unwrap();
-        }
+        self.press_key(key, Some(false));
+        self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_click(&mut self, key: crate::Key) {
-        if let crate::Key::Layout(c) = key {
-            let _ = self.click_key(c); // Pump event queue
-            self.event_queue.roundtrip(&mut self.state).unwrap();
-        }
+        self.press_key(key, Some(true));
+        self.press_key(key, Some(false));
+        self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 }
 
-struct VirtKbdState {
+struct VKState {
     keyboard_manager: Option<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1>,
     seat: Option<wl_seat::WlSeat>,
 }
 
-impl VirtKbdState {
+impl VKState {
     fn new() -> Self {
         Self {
             keyboard_manager: None,
@@ -760,7 +746,7 @@ impl VirtKbdState {
     }
 }
 
-impl Dispatch<wl_registry::WlRegistry, ()> for VirtKbdState {
+impl Dispatch<wl_registry::WlRegistry, ()> for VKState {
     fn event(
         state: &mut Self,
         registry: &wl_registry::WlRegistry,
@@ -771,18 +757,14 @@ impl Dispatch<wl_registry::WlRegistry, ()> for VirtKbdState {
     ) {
         // When receiving events from the wl_registry, we are only interested in the
         // `global` event, which signals a new available global.
-        // When receiving this event, we just print its characteristics in this example.
         if let wl_registry::Event::Global {
             name,
             interface,
-            version,
+            version: _,
         } = event
         {
-            // trace!("[{}] {} (v{})", name, interface, version);
-
             match &interface[..] {
                 "wl_seat" => {
-                    // Setup seat for keyboard
                     let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, 1, qh, ());
                     state.seat = Some(seat);
                 }
@@ -802,41 +784,41 @@ impl Dispatch<wl_registry::WlRegistry, ()> for VirtKbdState {
     }
 }
 
-impl Dispatch<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, ()> for VirtKbdState {
+impl Dispatch<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, ()> for VKState {
     fn event(
         _state: &mut Self,
         _manager: &zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
-        event: zwp_virtual_keyboard_manager_v1::Event,
+        _event: zwp_virtual_keyboard_manager_v1::Event,
         _: &(),
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        // info!("Got a virtual keyboard manager event {:?}", event);
+        // println!("Received a virtual keyboard manager event {event:?}");
     }
 }
 
-impl Dispatch<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1, ()> for VirtKbdState {
+impl Dispatch<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1, ()> for VKState {
     fn event(
         _state: &mut Self,
-        _manager: &zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
-        event: zwp_virtual_keyboard_v1::Event,
+        _vk: &zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
+        _event: zwp_virtual_keyboard_v1::Event,
         _: &(),
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        // info!("Got a virtual keyboard event {:?}", event);
+        // println!("Got a virtual keyboard event {event:?}");
     }
 }
 
-impl Dispatch<wl_seat::WlSeat, ()> for VirtKbdState {
+impl Dispatch<wl_seat::WlSeat, ()> for VKState {
     fn event(
-        _: &mut Self,
-        _: &wl_seat::WlSeat,
-        event: wl_seat::Event,
+        _state: &mut Self,
+        _seat: &wl_seat::WlSeat,
+        _event: wl_seat::Event,
         _: &(),
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        // info!("Got a seat event {:?}", event);
+        // println!("Got a seat event {event:?}");
     }
 }

@@ -138,7 +138,7 @@ impl WaylandConnection {
     /// # Errors
     /// The only way this can throw an error is if the generated String is not
     /// valid UTF8
-    pub fn generate_keymap_string(&mut self) -> Result<String, DisplayOutputError> {
+    fn generate_keymap_string(&mut self) -> Result<String, DisplayOutputError> {
         let mut buf: Vec<u8> = Vec::new();
         writeln!(
             buf,
@@ -591,7 +591,7 @@ impl WaylandConnection {
     ///
     /// # Errors
     /// TODO
-    pub fn apply_layout(&mut self, layout: &str) {
+    fn apply_layout(&mut self, layout: &str) {
         // We need to build a file with a fd in order to pass the layout file to Wayland
         // for processing
         let keymap_size = layout.len();
@@ -674,7 +674,7 @@ impl WaylandConnection {
     ///
     /// # Errors
     /// TODO
-    pub fn send_key_event(&mut self, keycode: Keycode, press: bool) {
+    fn send_key_event(&mut self, keycode: Keycode, press: bool) {
         let time = self.get_time();
         let state = u32::from(press);
         let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
@@ -683,6 +683,15 @@ impl WaylandConnection {
 
         // Send key event message
         self.virtual_keyboard.key(time, keycode, state);
+    }
+
+    fn send_modifier_event(&mut self) {
+        let mods_depressed = 0;
+        let mods_latched = 0;
+        let mods_locked = 0;
+        let group = 0;
+        self.virtual_keyboard
+            .modifiers(mods_depressed, mods_latched, mods_locked, group)
     }
 }
 

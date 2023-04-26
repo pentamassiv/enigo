@@ -247,10 +247,6 @@ impl EnigoX11 {
         match self.unused_keycodes.pop_front() {
             // A keycode is unused so a mapping is possible
             Some(unused_keycode) => {
-                println!("Need to bind:");
-                println!("keysym:{keysym}");
-                println!("keycode:{unused_keycode}");
-
                 self.bind_key(unused_keycode, keysym);
                 self.keymap.insert(keysym, unused_keycode);
                 Ok(unused_keycode)

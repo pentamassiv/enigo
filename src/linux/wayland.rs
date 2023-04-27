@@ -841,7 +841,7 @@ impl MouseControllable for WaylandConnection {
             .button(time, button, wl_pointer::ButtonState::Pressed);
         self.virtual_pointer.frame(); // TODO: Check if this is needed
         self.virtual_pointer
-            .button(time, button, wl_pointer::ButtonState::Released);
+            .button(time + 5, button, wl_pointer::ButtonState::Released);
         self.virtual_pointer.frame(); // TODO: Check if this is needed
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }

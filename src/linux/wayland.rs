@@ -653,28 +653,54 @@ impl WaylandConnection {
             self.apply_layout(&keymap);
             self.needs_regeneration = false;
         }
+        let modifier = self.is_modifier(key);
 
         match press {
             None => {
-                self.send_key_event(keycode, true);
-                self.send_key_event(keycode, false);
+                if let Some(m) = modifier {
+                    self.send_modifier_event(self.modifiers | m);
+                    self.send_modifier_event(self.modifiers);
+                } else {
+                    self.send_key_event(keycode, true);
+                    self.send_key_event(keycode, false);
+                }
             }
             Some(true) => {
-                if key == Key::Control {
-                    self.send_modifier_event(MOD_CONTROL);
-                    return;
+                if let Some(m) = modifier {
+                    self.modifiers |= m;
+                    self.send_modifier_event(self.modifiers);
+                } else {
+                    self.send_key_event(keycode, true);
                 }
-                self.send_key_event(keycode, true);
                 self.held.push(key);
             }
             Some(false) => {
-                if key == Key::Control {
-                    self.send_modifier_event(MOD_NO_MODIFIERS);
-                    return;
+                if let Some(m) = modifier {
+                    self.modifiers &= !m;
+                    self.send_modifier_event(self.modifiers);
+                } else {
+                    self.send_key_event(keycode, false);
                 }
-                self.send_key_event(keycode, false);
                 self.held.retain(|&k| k != key);
             }
+        }
+    }
+
+    fn is_modifier(&self, key: Key) -> Option<u32> {
+        match key {
+            // TODO: Check if these are the only ones
+            Key::Alt | Key::Option => Some(Modifier::Alt as u32),
+            Key::CapsLock => Some(Modifier::Alt as u32),
+            Key::Control | Key::LControl => Some(Modifier::Alt as u32),
+            Key::LMenu => Some(Modifier::Alt as u32),
+            Key::ModeChange => Some(Modifier::Alt as u32),
+            Key::Numlock => Some(Modifier::Alt as u32),
+            Key::RControl => Some(Modifier::Control as u32),
+            Key::RShift => Some(Modifier::Shift as u32),
+            Key::ScrollLock => Some(Modifier::Alt as u32),
+            Key::Shift | Key::LShift => Some(Modifier::Shift as u32),
+            Key::Command | Key::Super | Key::Windows | Key::Meta => Some(Modifier::Meta as u32),
+            _ => None,
         }
     }
 
@@ -701,23 +727,24 @@ impl WaylandConnection {
     }
 }
 
-const MOD_NO_MODIFIERS: u32 = 0x0;
-const MOD_SHIFT: u32 = 0x1;
-const MOD_LOCK: u32 = 0x2;
-const MOD_CONTROL: u32 = 0x4;
-const MOD_MOD1: u32 = 0x8;
-/// Alt
-const MOD_MOD2: u32 = 0x10;
-const MOD_MOD3: u32 = 0x20;
-const MOD_MOD4: u32 = 0x40;
-/// Meta
-const MOD_MOD5: u32 = 0x80;
-/// AltGr
+enum Modifier {
+    Shift = 0x1,
+    Lock = 0x2,
+    Control = 0x4,
+    /// MOD1
+    Alt = 0x8,
+    Mod2 = 0x10,
+    Mod3 = 0x20,
+    /// MOD4
+    Meta = 0x40,
+    /// MOD5
+    AltGr = 0x80,
+}
 
 impl Drop for WaylandConnection {
     fn drop(&mut self) {
-        for c in &self.held.clone() {
-            self.press_key(*c, Some(false));
+        for &k in &self.held.clone() {
+            self.press_key(k, Some(false));
         }
         // This is not needed on wayland with the virtual keyboard protocol,
         // because we create a new keymap just for this protocol so we don't

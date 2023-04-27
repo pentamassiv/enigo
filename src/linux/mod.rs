@@ -79,21 +79,21 @@ impl KeyboardControllable for Enigo {
     fn key_sequence(&mut self, sequence: &str) {
         #[cfg(feature = "wayland")]
         self.wayland.as_mut().unwrap().key_sequence(sequence);
-        //self.x11.as_mut().unwrap().key_sequence(sequence);
+        self.x11.as_mut().unwrap().key_sequence(sequence);
     }
     fn key_down(&mut self, key: Key) {
         #[cfg(feature = "wayland")]
         self.wayland.as_mut().unwrap().key_down(key);
-        //self.x11.as_mut().unwrap().key_down(key);
+        self.x11.as_mut().unwrap().key_down(key);
     }
     fn key_up(&mut self, key: Key) {
         #[cfg(feature = "wayland")]
         self.wayland.as_mut().unwrap().key_up(key);
-        // self.x11.as_mut().unwrap().key_up(key);
+        self.x11.as_mut().unwrap().key_up(key);
     }
     fn key_click(&mut self, key: Key) {
         #[cfg(feature = "wayland")]
         self.wayland.as_mut().unwrap().key_click(key);
-        //self.x11.as_mut().unwrap().key_click(key);
+        self.x11.as_mut().unwrap().key_click(key);
     }
 }

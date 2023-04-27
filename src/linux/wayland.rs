@@ -402,7 +402,7 @@ impl WaylandConnection {
             // Do NOT change this part. It is required by Xorg/Xwayland.
             virtual_modifiers OSK;
             type \"ONE_LEVEL\" {{
-                modifiers= none;
+                modifiers= all;
                 level_name[Level1]= \"Any\";
             }};
             type \"TWO_LEVEL\" {{

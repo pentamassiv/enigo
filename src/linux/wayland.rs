@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use tempfile::tempfile;
 
+use wayland_client::protocol::wl_output;
 use wayland_client::{
     protocol::{wl_pointer, wl_registry, wl_seat},
     Connection, Dispatch, EventQueue, QueueHandle,
@@ -892,7 +893,7 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn main_display_size(&self) -> (i32, i32) {
-        (0, 0)
+        (self.state.width, self.state.height)
     }
     fn mouse_location(&self) -> (i32, i32) {
         println!("You tried to get the mouse location. I don't know how this is possible under Wayland. Let me know if there is a new protocol");
@@ -904,6 +905,9 @@ struct WaylandState {
     keyboard_manager: Option<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1>,
     pointer_manager: Option<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1>,
     seat: Option<wl_seat::WlSeat>,
+    output: Option<wl_output::WlOutput>,
+    width: i32,
+    height: i32,
 }
 
 impl WaylandState {
@@ -912,6 +916,9 @@ impl WaylandState {
             keyboard_manager: None,
             pointer_manager: None,
             seat: None,
+            output: None,
+            width: 0,
+            height: 0,
         }
     }
 }
@@ -937,6 +944,10 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                 "wl_seat" => {
                     let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, 1, qh, ());
                     state.seat = Some(seat);
+                }
+                "wl_output" => {
+                    let output = registry.bind::<wl_output::WlOutput, _, _>(name, 1, qh, ());
+                    state.output = Some(output);
                 }
                 "zwp_virtual_keyboard_manager_v1" => {
                     let manager = registry
@@ -1000,6 +1011,43 @@ impl Dispatch<wl_seat::WlSeat, ()> for WaylandState {
         _qh: &QueueHandle<Self>,
     ) {
         // println!("Got a seat event {event:?}");
+    }
+}
+
+impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
+    fn event(
+        state: &mut Self,
+        _output: &wl_output::WlOutput,
+        event: wl_output::Event,
+        _: &(),
+        _: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        match event {
+            wl_output::Event::Geometry {
+                x,
+                y,
+                physical_width,
+                physical_height,
+                subpixel,
+                make,
+                model,
+                transform,
+            } => {
+                state.width = x;
+                state.height = y;
+                println!("x: {x}, y: {y}, physical_width: {physical_width}, physical_height: {physical_height}, make: {make}, model: {model}");
+            }
+            wl_output::Event::Mode {
+                flags,
+                width,
+                height,
+                refresh,
+            } => {
+                println!("width: {width}, height: {height}");
+            }
+            _ => {}
+        };
     }
 }
 

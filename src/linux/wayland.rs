@@ -754,6 +754,7 @@ impl Drop for WaylandConnection {
             self.press_key(k, Some(false));
         }
         self.virtual_keyboard.destroy();
+        self.virtual_pointer.destroy();
         // This is not needed on wayland with the virtual keyboard protocol,
         // because we create a new keymap just for this protocol so we don't
         // care about it's state as soon as we no longer use it
@@ -894,6 +895,7 @@ impl MouseControllable for WaylandConnection {
         (0, 0)
     }
     fn mouse_location(&self) -> (i32, i32) {
+        println!("You tried to get the mouse location. I don't know how this is possible under Wayland. Let me know if there is a new protocol");
         (0, 0)
     }
 }

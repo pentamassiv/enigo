@@ -64,6 +64,7 @@ pub struct WaylandConnection {
     keymap: HashMap<Keysym, Keycode>, // UTF-8 -> (keysym, keycode, refcount)
     unused_keycodes: VecDeque<Keycode>, // Used to keep track of unused keycodes
     needs_regeneration: bool,
+    modifiers: u32,
     held: Vec<Key>,
     base_time: std::time::Instant,
 }
@@ -118,6 +119,7 @@ impl WaylandConnection {
             unused_keycodes.push_back(n);
         }
         let needs_regeneration = true;
+        let modifiers = 0x0;
         let held = Vec::with_capacity(255 - 7);
         let base_time = Instant::now();
         Ok(WaylandConnection {
@@ -127,6 +129,7 @@ impl WaylandConnection {
             keymap,
             unused_keycodes,
             needs_regeneration,
+            modifiers,
             held,
             base_time,
             virtual_keyboard,
@@ -402,7 +405,7 @@ impl WaylandConnection {
             // Do NOT change this part. It is required by Xorg/Xwayland.
             virtual_modifiers OSK;
             type \"ONE_LEVEL\" {{
-                modifiers= all;
+                modifiers= none;
                 level_name[Level1]= \"Any\";
             }};
             type \"TWO_LEVEL\" {{
@@ -657,10 +660,18 @@ impl WaylandConnection {
                 self.send_key_event(keycode, false);
             }
             Some(true) => {
+                if key == Key::Control {
+                    self.send_modifier_event(MOD_CONTROL);
+                    return;
+                }
                 self.send_key_event(keycode, true);
                 self.held.push(key);
             }
             Some(false) => {
+                if key == Key::Control {
+                    self.send_modifier_event(MOD_NO_MODIFIERS);
+                    return;
+                }
                 self.send_key_event(keycode, false);
                 self.held.retain(|&k| k != key);
             }
@@ -685,15 +696,23 @@ impl WaylandConnection {
         self.virtual_keyboard.key(time, keycode, state);
     }
 
-    fn send_modifier_event(&mut self) {
-        let mods_depressed = 0;
-        let mods_latched = 0;
-        let mods_locked = 0;
-        let group = 0;
-        self.virtual_keyboard
-            .modifiers(mods_depressed, mods_latched, mods_locked, group)
+    fn send_modifier_event(&mut self, modifiers: u32) {
+        self.virtual_keyboard.modifiers(modifiers, 0, 0, 0)
     }
 }
+
+const MOD_NO_MODIFIERS: u32 = 0x0;
+const MOD_SHIFT: u32 = 0x1;
+const MOD_LOCK: u32 = 0x2;
+const MOD_CONTROL: u32 = 0x4;
+const MOD_MOD1: u32 = 0x8;
+/// Alt
+const MOD_MOD2: u32 = 0x10;
+const MOD_MOD3: u32 = 0x20;
+const MOD_MOD4: u32 = 0x40;
+/// Meta
+const MOD_MOD5: u32 = 0x80;
+/// AltGr
 
 impl Drop for WaylandConnection {
     fn drop(&mut self) {

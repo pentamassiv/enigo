@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use tempfile::tempfile;
 
-use wayland_client::protocol::wl_output;
+// use wayland_client::protocol::wl_output;
 use wayland_client::{
     protocol::{wl_pointer, wl_registry, wl_seat},
     Connection, Dispatch, EventQueue, QueueHandle,
@@ -893,7 +893,8 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn main_display_size(&self) -> (i32, i32) {
-        (self.state.width, self.state.height)
+        //(self.state.width, self.state.height)
+        (0, 0)
     }
     fn mouse_location(&self) -> (i32, i32) {
         println!("You tried to get the mouse location. I don't know how this is possible under Wayland. Let me know if there is a new protocol");
@@ -905,9 +906,9 @@ struct WaylandState {
     keyboard_manager: Option<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1>,
     pointer_manager: Option<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1>,
     seat: Option<wl_seat::WlSeat>,
-    output: Option<wl_output::WlOutput>,
+    /*  output: Option<wl_output::WlOutput>,
     width: i32,
-    height: i32,
+    height: i32,*/
 }
 
 impl WaylandState {
@@ -916,9 +917,9 @@ impl WaylandState {
             keyboard_manager: None,
             pointer_manager: None,
             seat: None,
-            output: None,
+            /*  output: None,
             width: 0,
-            height: 0,
+            height: 0,*/
         }
     }
 }
@@ -945,10 +946,10 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                     let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, 1, qh, ());
                     state.seat = Some(seat);
                 }
-                "wl_output" => {
+                /*"wl_output" => {
                     let output = registry.bind::<wl_output::WlOutput, _, _>(name, 1, qh, ());
                     state.output = Some(output);
-                }
+                }*/
                 "zwp_virtual_keyboard_manager_v1" => {
                     let manager = registry
                         .bind::<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, _, _>(
@@ -1014,6 +1015,7 @@ impl Dispatch<wl_seat::WlSeat, ()> for WaylandState {
     }
 }
 
+/*
 impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -1049,7 +1051,7 @@ impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
             _ => {}
         };
     }
-}
+}*/
 
 impl Dispatch<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, ()> for WaylandState {
     fn event(

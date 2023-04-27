@@ -846,6 +846,8 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_scroll_x(&mut self, length: i32) {
+        // TODO: Check what the value of length should be
+        // TODO: Check if it would be better to use .axis_discrete here
         println!("mouse_scroll_x");
         let time = self.get_time();
         self.virtual_pointer
@@ -854,6 +856,8 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_scroll_y(&mut self, length: i32) {
+        // TODO: Check what the value of length should be
+        // TODO: Check if it would be better to use .axis_discrete here
         println!("mouse_scroll_y");
         let time = self.get_time();
         self.virtual_pointer

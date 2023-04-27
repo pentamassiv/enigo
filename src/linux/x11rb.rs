@@ -160,7 +160,7 @@ impl EnigoX11 {
                 // Raw keycodes cannot be converted to keysyms
                 panic!("Attempted to convert raw keycode {k} to keysym");
             }
-            Key::Alt | Key::Option => keysyms::KEY_Alt_L,
+            Key::Alt | Key::LAlt | Key::Option => keysyms::KEY_Alt_L,
             Key::Backspace => keysyms::KEY_BackSpace,
             Key::Begin => keysyms::KEY_Begin,
             Key::Break => keysyms::KEY_Break,
@@ -224,6 +224,7 @@ impl EnigoX11 {
             Key::PageUp => keysyms::KEY_Page_Up,
             Key::Pause => keysyms::KEY_Pause,
             Key::Print => keysyms::KEY_Print,
+            Key::RAlt => keysyms::KEY_Alt_R,
             Key::RControl => keysyms::KEY_Control_R,
             Key::Redo => keysyms::KEY_Redo,
             Key::Return => keysyms::KEY_Return,

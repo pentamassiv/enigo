@@ -339,6 +339,8 @@ pub enum Key {
     #[cfg(target_os = "macos")]
     /// Opens launchpad
     Launchpad,
+    #[cfg(target_os = "linux")]
+    LAlt,
     #[cfg(target_os = "windows")]
     LButton,
     LControl,
@@ -500,6 +502,8 @@ pub enum Key {
     Print,
     #[cfg(target_os = "windows")]
     Processkey,
+    #[cfg(target_os = "linux")]
+    RAlt,
     #[cfg(target_os = "windows")]
     RButton,
     #[cfg(target_os = "macos")]

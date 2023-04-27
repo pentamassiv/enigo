@@ -475,7 +475,7 @@ impl WaylandConnection {
                 // Raw keycodes cannot be converted to keysyms
                 panic!("Attempted to convert raw keycode {k} to keysym");
             }
-            Key::Alt | Key::Option => keysyms::KEY_Alt_L,
+            Key::Alt | Key::LAlt | Key::Option => keysyms::KEY_Alt_L,
             Key::Backspace => keysyms::KEY_BackSpace,
             Key::Begin => keysyms::KEY_Begin,
             Key::Break => keysyms::KEY_Break,
@@ -540,6 +540,7 @@ impl WaylandConnection {
             Key::Pause => keysyms::KEY_Pause,
             Key::Print => keysyms::KEY_Print,
             Key::RControl => keysyms::KEY_Control_R,
+            Key::RAlt => keysyms::KEY_Alt_R,
             Key::Redo => keysyms::KEY_Redo,
             Key::Return => keysyms::KEY_Return,
             Key::RightArrow => keysyms::KEY_Right,
@@ -688,18 +689,14 @@ impl WaylandConnection {
 
     fn is_modifier(&self, key: Key) -> Option<u32> {
         match key {
-            // TODO: Check if these are the only ones
-            Key::Alt | Key::Option => Some(Modifier::Alt as u32),
-            Key::CapsLock => Some(Modifier::Alt as u32),
-            Key::Control | Key::LControl => Some(Modifier::Alt as u32),
-            Key::LMenu => Some(Modifier::Alt as u32),
-            Key::ModeChange => Some(Modifier::Alt as u32),
-            Key::Numlock => Some(Modifier::Alt as u32),
-            Key::RControl => Some(Modifier::Control as u32),
-            Key::RShift => Some(Modifier::Shift as u32),
-            Key::ScrollLock => Some(Modifier::Alt as u32),
-            Key::Shift | Key::LShift => Some(Modifier::Shift as u32),
-            Key::Command | Key::Super | Key::Windows | Key::Meta => Some(Modifier::Meta as u32),
+            Key::Shift | Key::LShift | Key::RShift => Some(Modifier::Shift as u32),
+            Key::CapsLock => Some(Modifier::Lock as u32),
+            Key::Control | Key::LControl | Key::RControl => Some(Modifier::Control as u32),
+            Key::Alt | Key::LAlt | Key::RAlt | Key::Option => Some(Modifier::Mod1 as u32),
+            Key::Numlock => Some(Modifier::Mod2 as u32),
+            // Key:: => Some(Modifier::Mod3 as u32),
+            Key::Command | Key::Super | Key::Windows | Key::Meta => Some(Modifier::Mod4 as u32),
+            Key::ModeChange => Some(Modifier::Mod5 as u32),
             _ => None,
         }
     }
@@ -731,14 +728,11 @@ enum Modifier {
     Shift = 0x1,
     Lock = 0x2,
     Control = 0x4,
-    /// MOD1
-    Alt = 0x8,
+    Mod1 = 0x8,
     Mod2 = 0x10,
     Mod3 = 0x20,
-    /// MOD4
-    Meta = 0x40,
-    /// MOD5
-    AltGr = 0x80,
+    Mod4 = 0x40,
+    Mod5 = 0x80,
 }
 
 impl Drop for WaylandConnection {

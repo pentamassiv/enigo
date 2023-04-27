@@ -120,9 +120,11 @@ impl WaylandConnection {
         let Some(vk_mgr) = state.keyboard_manager.as_ref()else{return Err(DisplayOutputError::General("No VKMgr".to_string()))};
         let virtual_keyboard = vk_mgr.create_virtual_keyboard(seat, &qh, ());
 
+        println!("Before");
         // Setup virtual pointer
         let Some(vp_mgr) = state.pointer_manager.as_ref()else{return Err(DisplayOutputError::General("No VPMgr".to_string()))};
         let virtual_pointer = vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ());
+        println!("After");
 
         // Only keycodes from 8 to 255 can be used
         let keymap = HashMap::with_capacity(255 - 7);

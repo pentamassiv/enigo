@@ -744,6 +744,7 @@ impl Drop for WaylandConnection {
         for &k in &self.held.clone() {
             self.press_key(k, Some(false));
         }
+        self.virtual_keyboard.destroy();
         // This is not needed on wayland with the virtual keyboard protocol,
         // because we create a new keymap just for this protocol so we don't
         // care about it's state as soon as we no longer use it

@@ -1009,11 +1009,11 @@ fn mousebutton(button: MouseButton) -> u32 {
         MouseButton::Left => 0x110,
         MouseButton::Middle => 0x111,
         MouseButton::Right => 0x112,
-        MouseButton::ScrollUp => 4,
-        MouseButton::ScrollDown => 5,
-        MouseButton::ScrollLeft => 6,
-        MouseButton::ScrollRight => 7,
-        MouseButton::Back => 8,
-        MouseButton::Forward => 9,
+        MouseButton::ScrollUp => 0x113,
+        MouseButton::ScrollDown => 0x114,
+        MouseButton::ScrollLeft => 0x115,
+        MouseButton::ScrollRight => 0x116,
+        MouseButton::Back => 0x117,
+        MouseButton::Forward => 0x118,
     }
 }

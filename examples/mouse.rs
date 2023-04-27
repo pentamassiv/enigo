@@ -9,30 +9,6 @@ fn main() {
     // let mut enigo = enigo::XConnection::default();
 
     thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::Left);
-    println!(".");
-    thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::Middle);
-    println!(".");
-    thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::Right);
-    println!(".");
-    thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::ScrollUp);
-    println!(".");
-    thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::ScrollDown);
-    println!(".");
-    thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::ScrollLeft);
-    println!(".");
-    thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::ScrollRight);
-    println!(".");
-    thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::Back);
-    println!(".");
-    thread::sleep(Duration::from_secs(4));
-    enigo.mouse_click(MouseButton::Forward);
-    println!(".");
+    let (width, height) = enigo.main_display_size();
+    println!("main_display_size: width: {width}, height: {height}");
 }

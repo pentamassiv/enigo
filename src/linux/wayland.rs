@@ -793,6 +793,7 @@ impl KeyboardControllable for WaylandConnection {
 
 impl MouseControllable for WaylandConnection {
     fn mouse_move_to(&mut self, x: i32, y: i32) {
+        println!("mouse_move_to");
         let time = self.get_time();
         self.virtual_pointer.motion_absolute(
             time,
@@ -805,12 +806,14 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_move_relative(&mut self, x: i32, y: i32) {
+        println!("mouse_move_relative");
         let time = self.get_time();
         self.virtual_pointer.motion(time, x as f64, y as f64);
         self.virtual_pointer.frame(); // TODO: Check if this is needed
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_down(&mut self, button: MouseButton) {
+        println!("mouse_down");
         let time = self.get_time();
         let button = mousebutton(button);
         self.virtual_pointer
@@ -819,6 +822,7 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_up(&mut self, button: MouseButton) {
+        println!("mouse_up");
         let time = self.get_time();
         let button = mousebutton(button);
         self.virtual_pointer
@@ -827,6 +831,7 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_click(&mut self, button: MouseButton) {
+        println!("mouse_click");
         let time = self.get_time();
         let button = mousebutton(button);
         self.virtual_pointer
@@ -838,6 +843,7 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_scroll_x(&mut self, length: i32) {
+        println!("mouse_scroll_x");
         let time = self.get_time();
         self.virtual_pointer
             .axis(time, wl_pointer::Axis::HorizontalScroll, length.into());
@@ -845,6 +851,7 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_scroll_y(&mut self, length: i32) {
+        println!("mouse_scroll_y");
         let time = self.get_time();
         self.virtual_pointer
             .axis(time, wl_pointer::Axis::VerticalScroll, length.into());
@@ -852,9 +859,11 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn main_display_size(&self) -> (i32, i32) {
+        println!("main_display_size");
         (0, 0)
     }
     fn mouse_location(&self) -> (i32, i32) {
+        println!("mouse_location");
         (0, 0)
     }
 }

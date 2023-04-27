@@ -120,12 +120,9 @@ impl WaylandConnection {
         let Some(vk_mgr) = state.keyboard_manager.as_ref()else{return Err(DisplayOutputError::General("No VKMgr".to_string()))};
         let virtual_keyboard = vk_mgr.create_virtual_keyboard(seat, &qh, ());
 
-        println!("Before");
         // Setup virtual pointer
         let Some(vp_mgr) = state.pointer_manager.as_ref()else{return Err(DisplayOutputError::General("No VPMgr".to_string()))};
-        println!("Mid");
         let virtual_pointer = vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ());
-        println!("After");
 
         // Only keycodes from 8 to 255 can be used
         let keymap = HashMap::with_capacity(255 - 7);
@@ -796,7 +793,6 @@ impl KeyboardControllable for WaylandConnection {
 
 impl MouseControllable for WaylandConnection {
     fn mouse_move_to(&mut self, x: i32, y: i32) {
-        println!("mouse_move_to");
         let time = self.get_time();
         self.virtual_pointer.motion_absolute(
             time,
@@ -809,34 +805,65 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_move_relative(&mut self, x: i32, y: i32) {
-        println!("mouse_move_relative");
         let time = self.get_time();
         self.virtual_pointer.motion(time, x as f64, y as f64);
         self.virtual_pointer.frame(); // TODO: Check if this is needed
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_down(&mut self, button: MouseButton) {
-        println!("mouse_down");
         let time = self.get_time();
-        let button = mousebutton(button);
+        let button = match button {
+            // Taken from /linux/input-event-codes.h
+            MouseButton::Left => 0x110,
+            MouseButton::Middle => 0x112,
+            MouseButton::Right => 0x111,
+            MouseButton::ScrollUp => return self.mouse_scroll_y(-1),
+            MouseButton::ScrollDown => return self.mouse_scroll_y(1),
+            MouseButton::ScrollLeft => return self.mouse_scroll_x(-1),
+            MouseButton::ScrollRight => return self.mouse_scroll_x(1),
+            MouseButton::Back => 0x116,
+            MouseButton::Forward => 0x115,
+        };
+
         self.virtual_pointer
             .button(time, button, wl_pointer::ButtonState::Pressed);
         self.virtual_pointer.frame(); // TODO: Check if this is needed
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_up(&mut self, button: MouseButton) {
-        println!("mouse_up");
         let time = self.get_time();
-        let button = mousebutton(button);
+        let button = match button {
+            // Taken from /linux/input-event-codes.h
+            MouseButton::Left => 0x110,
+            MouseButton::Middle => 0x112,
+            MouseButton::Right => 0x111,
+            // Releasing one of the scroll mouse buttons has no effect
+            MouseButton::ScrollUp
+            | MouseButton::ScrollDown
+            | MouseButton::ScrollLeft
+            | MouseButton::ScrollRight => return,
+            MouseButton::Back => 0x116,
+            MouseButton::Forward => 0x115,
+        };
         self.virtual_pointer
             .button(time, button, wl_pointer::ButtonState::Released);
         self.virtual_pointer.frame(); // TODO: Check if this is needed
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_click(&mut self, button: MouseButton) {
-        println!("mouse_click");
         let time = self.get_time();
-        let button = mousebutton(button);
+        let button = match button {
+            // Taken from /linux/input-event-codes.h
+            MouseButton::Left => 0x110,
+            MouseButton::Middle => 0x112,
+            MouseButton::Right => 0x111,
+            MouseButton::ScrollUp => return self.mouse_scroll_y(-1),
+            MouseButton::ScrollDown => return self.mouse_scroll_y(1),
+            MouseButton::ScrollLeft => return self.mouse_scroll_x(-1),
+            MouseButton::ScrollRight => return self.mouse_scroll_x(1),
+            MouseButton::Back => 0x116,
+            MouseButton::Forward => 0x115,
+        };
         self.virtual_pointer
             .button(time, button, wl_pointer::ButtonState::Pressed);
         self.virtual_pointer.frame(); // TODO: Check if this is needed
@@ -848,7 +875,6 @@ impl MouseControllable for WaylandConnection {
     fn mouse_scroll_x(&mut self, length: i32) {
         // TODO: Check what the value of length should be
         // TODO: Check if it would be better to use .axis_discrete here
-        println!("mouse_scroll_x");
         let time = self.get_time();
         self.virtual_pointer
             .axis(time, wl_pointer::Axis::HorizontalScroll, length.into());
@@ -858,7 +884,6 @@ impl MouseControllable for WaylandConnection {
     fn mouse_scroll_y(&mut self, length: i32) {
         // TODO: Check what the value of length should be
         // TODO: Check if it would be better to use .axis_discrete here
-        println!("mouse_scroll_y");
         let time = self.get_time();
         self.virtual_pointer
             .axis(time, wl_pointer::Axis::VerticalScroll, length.into());
@@ -866,11 +891,9 @@ impl MouseControllable for WaylandConnection {
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn main_display_size(&self) -> (i32, i32) {
-        println!("main_display_size");
         (0, 0)
     }
     fn mouse_location(&self) -> (i32, i32) {
-        println!("mouse_location");
         (0, 0)
     }
 }
@@ -1006,14 +1029,18 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
 
 fn mousebutton(button: MouseButton) -> u32 {
     match button {
+        // Taken from /linux/input-event-codes.h
         MouseButton::Left => 0x110,
-        MouseButton::Middle => 0x111,
-        MouseButton::Right => 0x112,
-        MouseButton::ScrollUp => 0x113,
-        MouseButton::ScrollDown => 0x114,
-        MouseButton::ScrollLeft => 0x115,
-        MouseButton::ScrollRight => 0x116,
-        MouseButton::Back => 0x117,
-        MouseButton::Forward => 0x118,
+        MouseButton::Middle => 0x112,
+        MouseButton::Right => 0x111,
+        MouseButton::Back => 0x116,
+        MouseButton::Forward => 0x115,
+        MouseButton::ScrollUp
+        | MouseButton::ScrollDown
+        | MouseButton::ScrollLeft
+        | MouseButton::ScrollRight => {
+            // There are no keycodes for these buttons
+            unimplemented!()
+        }
     }
 }

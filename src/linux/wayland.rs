@@ -1006,9 +1006,9 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
 
 fn mousebutton(button: MouseButton) -> u32 {
     match button {
-        MouseButton::Left => 1,
-        MouseButton::Middle => 2,
-        MouseButton::Right => 3,
+        MouseButton::Left => 0x110,
+        MouseButton::Middle => 0x111,
+        MouseButton::Right => 0x112,
         MouseButton::ScrollUp => 4,
         MouseButton::ScrollDown => 5,
         MouseButton::ScrollLeft => 6,

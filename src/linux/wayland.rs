@@ -919,7 +919,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                     );
                     state.keyboard_manager = Some(manager);
                 }
-                "zwp_virtual_pointer_manager_v1" => {
+                "zwlr_virtual_pointer_manager_v1" => {
                     let manager = registry
                         .bind::<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, _, _>(
                         name,

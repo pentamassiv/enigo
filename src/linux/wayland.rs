@@ -123,6 +123,7 @@ impl WaylandConnection {
         println!("Before");
         // Setup virtual pointer
         let Some(vp_mgr) = state.pointer_manager.as_ref()else{return Err(DisplayOutputError::General("No VPMgr".to_string()))};
+        println!("Mid");
         let virtual_pointer = vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ());
         println!("After");
 

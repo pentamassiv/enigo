@@ -7,16 +7,19 @@ use std::time::Instant;
 use tempfile::tempfile;
 
 use wayland_client::{
-    protocol::{wl_registry, wl_seat},
+    protocol::{wl_pointer, wl_registry, wl_seat},
     Connection, Dispatch, EventQueue, QueueHandle,
 };
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1, zwp_virtual_keyboard_v1,
 };
+use wayland_protocols_wlr::virtual_pointer::v1::client::{
+    zwlr_virtual_pointer_manager_v1, zwlr_virtual_pointer_v1,
+};
 
 use xkbcommon::xkb::{keysym_from_name, keysym_get_name, keysyms, KEYSYM_NO_FLAGS};
 
-use crate::{Key, KeyboardControllable};
+use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 #[derive(Debug)]
 pub enum DisplayOutputError {
@@ -58,9 +61,10 @@ type Keycode = u32;
 
 pub struct WaylandConnection {
     _conn: Connection,
-    event_queue: EventQueue<VKState>,
-    state: VKState,
+    event_queue: EventQueue<WaylandState>,
+    state: WaylandState,
     virtual_keyboard: zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
+    virtual_pointer: zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1,
     keymap: HashMap<Keysym, Keycode>, // UTF-8 -> (keysym, keycode, refcount)
     unused_keycodes: VecDeque<Keycode>, // Used to keep track of unused keycodes
     needs_regeneration: bool,
@@ -104,17 +108,21 @@ impl WaylandConnection {
         display.get_registry(&qh, ());
 
         // Setup VKState and dispatch events
-        let mut state = VKState::new();
+        let mut state = WaylandState::new();
         if event_queue.roundtrip(&mut state).is_err() {
             return Err(DisplayOutputError::General(
                 "Roundtrip not possible".to_string(),
             ));
         };
 
-        // Setup Virtual Keyboard
+        // Setup virtual keyboard & virtual pointer
         let Some(seat) = state.seat.as_ref()else{return Err(DisplayOutputError::General("No seat".to_string()))};
         let Some(vk_mgr) = state.keyboard_manager.as_ref()else{return Err(DisplayOutputError::General("No VKMgr".to_string()))};
         let virtual_keyboard = vk_mgr.create_virtual_keyboard(seat, &qh, ());
+
+        // Setup virtual pointer
+        let Some(vp_mgr) = state.pointer_manager.as_ref()else{return Err(DisplayOutputError::General("No VPMgr".to_string()))};
+        let virtual_pointer = vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ());
 
         // Only keycodes from 8 to 255 can be used
         let keymap = HashMap::with_capacity(255 - 7);
@@ -137,6 +145,7 @@ impl WaylandConnection {
             held,
             base_time,
             virtual_keyboard,
+            virtual_pointer,
         })
     }
 
@@ -782,21 +791,91 @@ impl KeyboardControllable for WaylandConnection {
     }
 }
 
-struct VKState {
+impl MouseControllable for WaylandConnection {
+    fn mouse_move_to(&mut self, x: i32, y: i32) {
+        let time = self.get_time();
+        self.virtual_pointer.motion_absolute(
+            time,
+            x.try_into().unwrap(),
+            y.try_into().unwrap(),
+            u32::MAX, // TODO: Check what would be the correct value here
+            u32::MAX, // TODO: Check what would be the correct value here
+        );
+        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        self.event_queue.roundtrip(&mut self.state).unwrap();
+    }
+    fn mouse_move_relative(&mut self, x: i32, y: i32) {
+        let time = self.get_time();
+        self.virtual_pointer.motion(time, x as f64, y as f64);
+        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        self.event_queue.roundtrip(&mut self.state).unwrap();
+    }
+    fn mouse_down(&mut self, button: MouseButton) {
+        let time = self.get_time();
+        let button = mousebutton(button);
+        self.virtual_pointer
+            .button(time, button, wl_pointer::ButtonState::Pressed);
+        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        self.event_queue.roundtrip(&mut self.state).unwrap();
+    }
+    fn mouse_up(&mut self, button: MouseButton) {
+        let time = self.get_time();
+        let button = mousebutton(button);
+        self.virtual_pointer
+            .button(time, button, wl_pointer::ButtonState::Released);
+        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        self.event_queue.roundtrip(&mut self.state).unwrap();
+    }
+    fn mouse_click(&mut self, button: MouseButton) {
+        let time = self.get_time();
+        let button = mousebutton(button);
+        self.virtual_pointer
+            .button(time, button, wl_pointer::ButtonState::Pressed);
+        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        self.virtual_pointer
+            .button(time, button, wl_pointer::ButtonState::Released);
+        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        self.event_queue.roundtrip(&mut self.state).unwrap();
+    }
+    fn mouse_scroll_x(&mut self, length: i32) {
+        let time = self.get_time();
+        self.virtual_pointer
+            .axis(time, wl_pointer::Axis::HorizontalScroll, length.into());
+        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        self.event_queue.roundtrip(&mut self.state).unwrap();
+    }
+    fn mouse_scroll_y(&mut self, length: i32) {
+        let time = self.get_time();
+        self.virtual_pointer
+            .axis(time, wl_pointer::Axis::VerticalScroll, length.into());
+        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        self.event_queue.roundtrip(&mut self.state).unwrap();
+    }
+    fn main_display_size(&self) -> (i32, i32) {
+        (0, 0)
+    }
+    fn mouse_location(&self) -> (i32, i32) {
+        (0, 0)
+    }
+}
+
+struct WaylandState {
     keyboard_manager: Option<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1>,
+    pointer_manager: Option<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1>,
     seat: Option<wl_seat::WlSeat>,
 }
 
-impl VKState {
+impl WaylandState {
     fn new() -> Self {
         Self {
             keyboard_manager: None,
+            pointer_manager: None,
             seat: None,
         }
     }
 }
 
-impl Dispatch<wl_registry::WlRegistry, ()> for VKState {
+impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
     fn event(
         state: &mut Self,
         registry: &wl_registry::WlRegistry,
@@ -828,13 +907,23 @@ impl Dispatch<wl_registry::WlRegistry, ()> for VKState {
                     );
                     state.keyboard_manager = Some(manager);
                 }
+                "zwp_virtual_pointer_manager_v1" => {
+                    let manager = registry
+                        .bind::<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, _, _>(
+                        name,
+                        1,
+                        qh,
+                        (),
+                    );
+                    state.pointer_manager = Some(manager);
+                }
                 _ => {}
             }
         }
     }
 }
 
-impl Dispatch<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, ()> for VKState {
+impl Dispatch<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, ()> for WaylandState {
     fn event(
         _state: &mut Self,
         _manager: &zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
@@ -847,7 +936,7 @@ impl Dispatch<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, ()> 
     }
 }
 
-impl Dispatch<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1, ()> for VKState {
+impl Dispatch<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1, ()> for WaylandState {
     fn event(
         _state: &mut Self,
         _vk: &zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
@@ -860,7 +949,7 @@ impl Dispatch<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1, ()> for VKState {
     }
 }
 
-impl Dispatch<wl_seat::WlSeat, ()> for VKState {
+impl Dispatch<wl_seat::WlSeat, ()> for WaylandState {
     fn event(
         _state: &mut Self,
         _seat: &wl_seat::WlSeat,
@@ -870,5 +959,45 @@ impl Dispatch<wl_seat::WlSeat, ()> for VKState {
         _qh: &QueueHandle<Self>,
     ) {
         // println!("Got a seat event {event:?}");
+    }
+}
+
+impl Dispatch<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, ()> for WaylandState {
+    fn event(
+        _state: &mut Self,
+        _manager: &zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1,
+        _event: zwlr_virtual_pointer_manager_v1::Event,
+        _: &(),
+        _: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        // println!("Received a virtual keyboard manager event {event:?}");
+    }
+}
+
+impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandState {
+    fn event(
+        _state: &mut Self,
+        _vk: &zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1,
+        _event: zwlr_virtual_pointer_v1::Event,
+        _: &(),
+        _: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        // println!("Got a virtual keyboard event {event:?}");
+    }
+}
+
+fn mousebutton(button: MouseButton) -> u32 {
+    match button {
+        MouseButton::Left => 1,
+        MouseButton::Middle => 2,
+        MouseButton::Right => 3,
+        MouseButton::ScrollUp => 4,
+        MouseButton::ScrollDown => 5,
+        MouseButton::ScrollLeft => 6,
+        MouseButton::ScrollRight => 7,
+        MouseButton::Back => 8,
+        MouseButton::Forward => 9,
     }
 }

@@ -26,7 +26,13 @@ webbrowser = "0.8"
 
 [features]
 with_serde = ["serde", "serde_derive"]
-wayland = ["wayland-client", "wayland-protocols-misc", "memmap2", "tempfile"]
+wayland = [
+    "wayland-client",
+    "wayland-protocols-misc",
+    "wayland-protocols-wlr",
+    "memmap2",
+    "tempfile",
+]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.48", features = [
@@ -42,6 +48,9 @@ objc = "0.2"
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 wayland-protocols-misc = { version = "0.1", features = [
+    "client",
+], optional = true }
+wayland-protocols-wlr = { version = "0.1.0", features = [
     "client",
 ], optional = true }
 wayland-client = { version = "0.30", optional = true }

@@ -1028,21 +1028,3 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
         // println!("Got a virtual keyboard event {event:?}");
     }
 }
-
-fn mousebutton(button: MouseButton) -> u32 {
-    match button {
-        // Taken from /linux/input-event-codes.h
-        MouseButton::Left => 0x110,
-        MouseButton::Middle => 0x112,
-        MouseButton::Right => 0x111,
-        MouseButton::Back => 0x116,
-        MouseButton::Forward => 0x115,
-        MouseButton::ScrollUp
-        | MouseButton::ScrollDown
-        | MouseButton::ScrollLeft
-        | MouseButton::ScrollRight => {
-            // There are no keycodes for these buttons
-            unimplemented!()
-        }
-    }
-}

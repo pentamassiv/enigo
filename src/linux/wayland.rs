@@ -105,11 +105,15 @@ impl WaylandConnection {
 
         // Setup VKState and dispatch events
         let mut state = VKState::new();
-        event_queue.roundtrip(&mut state).unwrap();
+        if event_queue.roundtrip(&mut state).is_err() {
+            return Err(DisplayOutputError::General(
+                "Roundtrip not possible".to_string(),
+            ));
+        };
 
         // Setup Virtual Keyboard
-        let seat = state.seat.as_ref().unwrap();
-        let vk_mgr = state.keyboard_manager.as_ref().unwrap();
+        let Some(seat) = state.seat.as_ref()else{return Err(DisplayOutputError::General("No seat".to_string()))};
+        let Some(vk_mgr) = state.keyboard_manager.as_ref()else{return Err(DisplayOutputError::General("No VKMgr".to_string()))};
         let virtual_keyboard = vk_mgr.create_virtual_keyboard(seat, &qh, ());
 
         // Only keycodes from 8 to 255 can be used

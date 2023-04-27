@@ -208,7 +208,7 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
     }
     // The full list of names is available at https://cgit.freedesktop.org/xorg/proto/x11proto/plain/keysymdef.h
     Cow::Borrowed(match key {
-        Key::Alt => "Alt",
+        Key::Alt | Key::LAlt | Key::RAlt => "Alt",
         Key::Backspace => "BackSpace",
         Key::Begin => "Begin",
         Key::Break => "Break",

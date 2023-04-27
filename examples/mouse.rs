@@ -9,5 +9,5 @@ fn main() {
     // let mut enigo = enigo::XConnection::default();
 
     thread::sleep(Duration::from_secs(4));
-    enigo.mouse_scroll_y(-50);
+    enigo.mouse_click(MouseButton::Left);
 }

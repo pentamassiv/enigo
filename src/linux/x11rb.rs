@@ -12,56 +12,41 @@ use x11rb::{connection::Connection, wrapper::ConnectionExt as _};
 
 use xkbcommon::xkb::{keysym_from_name, keysyms, KEY_NoSymbol, KEYSYM_NO_FLAGS};
 
+use super::{ConnectionError, Keysym};
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
+
+pub type Keycode = u8;
+
+type CompositorConnection = RustConnection<DefaultStream>;
 
 /// Default delay between chunks of keys that are sent to the X11 server
 const DEFAULT_DELAY: u32 = 12;
 
-#[derive(Debug)]
-pub enum X11Error {
-    MappingFailed(Keysym),
-    Format(std::io::Error),
-}
-
-impl std::fmt::Display for X11Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            X11Error::MappingFailed(e) => write!(f, "Allocation failed: {e}"),
-            X11Error::Format(e) => write!(f, "Format: {e}"),
-        }
-    }
-}
-
-impl From<std::io::Error> for X11Error {
-    fn from(e: std::io::Error) -> Self {
-        X11Error::Format(e)
-    }
-}
-
-type Keysym = u32;
-type Keycode = u8;
-
 #[allow(clippy::module_name_repetitions)]
-pub struct EnigoX11 {
-    connection: RustConnection<DefaultStream>,
-    delay: u32,
-    screen: Screen,
+pub struct Con {
+    connection: CompositorConnection,
     keymap: HashMap<Keysym, Keycode>,
     unused_keycodes: VecDeque<Keycode>,
+    delay: u32,
+    screen: Screen,
     held: Vec<Key>,                               // Currently held keys
     last_keys: Vec<Keycode>,                      // Last pressed keycodes
     last_event_before_delays: std::time::Instant, // Time of the last event
     pending_delays: u32,
 }
 
-impl Default for EnigoX11 {
+impl Default for Con {
     fn default() -> Self {
         Self::new(DEFAULT_DELAY)
     }
 }
 
-impl EnigoX11 {
-    pub fn new(delay: u32) -> EnigoX11 {
+impl Con {
+    /// Tries to establish a new X11 connection
+    ///
+    /// # Errors
+    /// TODO
+    pub fn new(delay: u32) -> Con {
         let (connection, screen_idx) = x11rb::connect(None).unwrap();
         let delay = delay / 1000;
         let setup = connection.setup();
@@ -79,13 +64,13 @@ impl EnigoX11 {
         let last_keys = vec![];
         let last_event_before_delays = std::time::Instant::now();
         let pending_delays = 0;
-        EnigoX11 {
+        Con {
             connection,
-            delay,
-            screen,
             keymap,
             unused_keycodes,
             held,
+            delay,
+            screen,
             last_keys,
             last_event_before_delays,
             pending_delays,
@@ -106,7 +91,7 @@ impl EnigoX11 {
     }
 
     fn find_unused_keycodes(
-        connection: &RustConnection<DefaultStream>,
+        connection: &CompositorConnection,
         keycode_min: Keycode,
         keycode_max: Keycode,
     ) -> VecDeque<Keycode> {
@@ -134,7 +119,7 @@ impl EnigoX11 {
         unused_keycodes
     }
 
-    fn get_keycode(&mut self, keysym: Keysym) -> Result<Keycode, X11Error> {
+    fn get_keycode(&mut self, keysym: Keysym) -> Result<Keycode, ConnectionError> {
         if let Some(keycode) = self.keymap.get(&keysym) {
             // The keysym is already mapped and cached in the keymap
             Ok(*keycode)
@@ -244,7 +229,7 @@ impl EnigoX11 {
         }
     }
 
-    fn map_sym(&mut self, keysym: Keysym) -> Result<Keycode, X11Error> {
+    fn map_sym(&mut self, keysym: Keysym) -> Result<Keycode, ConnectionError> {
         match self.unused_keycodes.pop_front() {
             // A keycode is unused so a mapping is possible
             Some(unused_keycode) => {
@@ -253,7 +238,7 @@ impl EnigoX11 {
                 Ok(unused_keycode)
             }
             // All keycodes are being used. A mapping is not possible
-            None => Err(X11Error::MappingFailed(keysym)),
+            None => Err(ConnectionError::MappingFailed(keysym)),
         }
     }
 
@@ -311,7 +296,7 @@ impl EnigoX11 {
         self.last_keys.push(keycode);
     }
 
-    // Sends a key event to the X11 server via XTest extension
+    /// Sends a key event to the X11 server via XTest extension
     fn send_key_event(&mut self, keycode: Keycode, press: bool) {
         let type_ = if press {
             x11rb::protocol::xproto::KEY_PRESS_EVENT
@@ -398,7 +383,17 @@ impl EnigoX11 {
         } else {
             x11rb::protocol::xproto::BUTTON_RELEASE_EVENT
         };
-        let detail = mousebutton(button);
+        let detail = match button {
+            MouseButton::Left => 1,
+            MouseButton::Middle => 2,
+            MouseButton::Right => 3,
+            MouseButton::ScrollUp => 4,
+            MouseButton::ScrollDown => 5,
+            MouseButton::ScrollLeft => 6,
+            MouseButton::ScrollRight => 7,
+            MouseButton::Back => 8,
+            MouseButton::Forward => 9,
+        };
         let time = delay;
         let root = self.screen.root;
         let root_x = 0;
@@ -446,12 +441,16 @@ impl EnigoX11 {
     }
 }
 
-impl Drop for EnigoX11 {
-    // Release the held keys before the XConnection is dropped
+impl Drop for Con {
+    // Release the held keys before the connection is dropped
     fn drop(&mut self) {
-        for c in &self.held.clone() {
-            self.press_key(*c, Some(false));
+        for &k in &self.held.clone() {
+            self.press_key(k, Some(false));
         }
+
+        // This is not needed on wayland with the virtual keyboard protocol,
+        // because we create a new keymap just for this protocol so we don't
+        // care about it's state as soon as we no longer use it
         for &keycode in self.keymap.values() {
             // Map the the given keycode
             // to the NoSymbol keysym so
@@ -461,7 +460,7 @@ impl Drop for EnigoX11 {
     }
 }
 
-impl KeyboardControllable for EnigoX11 {
+impl KeyboardControllable for Con {
     fn key_sequence(&mut self, string: &str) {
         for c in string.chars() {
             self.press_key(Key::Layout(c), None);
@@ -482,7 +481,7 @@ impl KeyboardControllable for EnigoX11 {
     }
 }
 
-impl MouseControllable for EnigoX11 {
+impl MouseControllable for Con {
     fn mouse_move_to(&mut self, x: i32, y: i32) {
         self.send_motion_notify_event(x, y, false);
     }
@@ -557,19 +556,5 @@ impl MouseControllable for EnigoX11 {
             .reply()
             .unwrap();
         (reply.root_x as i32, reply.root_y as i32)
-    }
-}
-
-fn mousebutton(button: MouseButton) -> u8 {
-    match button {
-        MouseButton::Left => 1,
-        MouseButton::Middle => 2,
-        MouseButton::Right => 3,
-        MouseButton::ScrollUp => 4,
-        MouseButton::ScrollDown => 5,
-        MouseButton::ScrollLeft => 6,
-        MouseButton::ScrollRight => 7,
-        MouseButton::Back => 8,
-        MouseButton::Forward => 9,
     }
 }

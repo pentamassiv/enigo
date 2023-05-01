@@ -1,19 +1,53 @@
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
+pub type Keysym = u32;
+
 #[cfg_attr(feature = "x11rb", path = "x11rb.rs")]
 #[cfg_attr(not(feature = "x11rb"), path = "xdo.rs")]
 mod x11;
-use self::x11::EnigoX11;
 
 #[cfg(feature = "wayland")]
 pub mod wayland;
-#[cfg(feature = "wayland")]
-use self::wayland::WaylandConnection;
+
+#[derive(Debug)]
+pub enum ConnectionError {
+    MappingFailed(Keysym),
+    Connection(String),
+    Format(std::io::Error),
+    General(String),
+    LostConnection,
+    NoKeycode,
+    SetLayoutFailed(String),
+    Unimplemented,
+    Utf(std::string::FromUtf8Error),
+}
+
+impl std::fmt::Display for ConnectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectionError::MappingFailed(e) => write!(f, "Allocation failed: {e}"),
+            ConnectionError::Connection(e) => write!(f, "Connection: {e}"),
+            ConnectionError::Format(e) => write!(f, "Format: {e}"),
+            ConnectionError::General(e) => write!(f, "General: {e}"),
+            ConnectionError::LostConnection => write!(f, "Lost connection"),
+            ConnectionError::NoKeycode => write!(f, "No keycode mapped"),
+            ConnectionError::SetLayoutFailed(e) => write!(f, "set_layout() failed: {e}"),
+            ConnectionError::Unimplemented => write!(f, "Unimplemented"),
+            ConnectionError::Utf(e) => write!(f, "UTF: {e}"),
+        }
+    }
+}
+
+impl From<std::io::Error> for ConnectionError {
+    fn from(e: std::io::Error) -> Self {
+        ConnectionError::Format(e)
+    }
+}
 
 pub struct Enigo {
     #[cfg(feature = "wayland")]
-    wayland: Option<WaylandConnection>,
-    x11: Option<EnigoX11>,
+    wayland: Option<wayland::Con>,
+    x11: Option<x11::Con>,
 }
 
 impl Enigo {
@@ -35,8 +69,8 @@ impl Default for Enigo {
     /// Create a new `Enigo` instance
     fn default() -> Self {
         #[cfg(feature = "wayland")]
-        let wayland = WaylandConnection::new().ok();
-        let x11 = Some(EnigoX11::default());
+        let wayland = wayland::Con::new().ok();
+        let x11 = Some(x11::Con::default());
         Self {
             #[cfg(feature = "wayland")]
             wayland,

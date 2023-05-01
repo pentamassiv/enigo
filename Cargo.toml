@@ -30,6 +30,7 @@ wayland = [
     "wayland-client",
     "wayland-protocols-misc",
     "wayland-protocols-wlr",
+    "wayland-protocols-plasma",
     "memmap2",
     "tempfile",
 ]
@@ -51,6 +52,9 @@ wayland-protocols-misc = { version = "0.1", features = [
     "client",
 ], optional = true }
 wayland-protocols-wlr = { version = "0.1.0", features = [
+    "client",
+], optional = true }
+wayland-protocols-plasma = { version = "0.1.0", features = [
     "client",
 ], optional = true }
 wayland-client = { version = "0.30", optional = true }

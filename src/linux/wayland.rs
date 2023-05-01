@@ -34,8 +34,8 @@ pub struct Con {
     unused_keycodes: VecDeque<Keycode>, // Used to keep track of unused keycodes
     event_queue: EventQueue<WaylandState>,
     state: WaylandState,
-    virtual_keyboard: zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
-    virtual_pointer: zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1,
+    virtual_keyboard: Option<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1>,
+    virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
     needs_regeneration: bool,
     modifiers: u32,
     held: Vec<Key>,
@@ -85,13 +85,22 @@ impl Con {
         };
 
         // Setup virtual keyboard & virtual pointer
-        let Some(seat) = state.seat.as_ref()else{return Err(ConnectionError::General("No seat".to_string()))};
-        let Some(vk_mgr) = state.keyboard_manager.as_ref()else{return Err(ConnectionError::General("No VKMgr".to_string()))};
-        let virtual_keyboard = vk_mgr.create_virtual_keyboard(seat, &qh, ());
+        let virtual_keyboard = if let Some(seat) = state.seat.as_ref() {
+            if let Some(vk_mgr) = state.keyboard_manager.as_ref() {
+                Some(vk_mgr.create_virtual_keyboard(seat, &qh, ()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Setup virtual pointer
-        let Some(vp_mgr) = state.pointer_manager.as_ref()else{return Err(ConnectionError::General("No VPMgr".to_string()))};
-        let virtual_pointer = vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ());
+        let virtual_pointer = if let Some(vp_mgr) = state.pointer_manager.as_ref() {
+            Some(vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ()))
+        } else {
+            None
+        };
 
         // Try to authenticate for the KDE Fake Input protocol
         if let Some(kde_input) = &state.kde_input {
@@ -579,34 +588,35 @@ impl Con {
 
     /// Apply XKB layout to virtual keyboard
     /// The layout is an XKB layout as a string (see `generate_keymap_string`())
-    /// NOTE: This function does not flush any messages to Wayland, you'll need
-    /// to schedule afterwards
+    /// NOTE: This function does not flush any messages to Wayland, you have to
+    /// do that afterwards
     ///
     /// # Errors
     /// TODO
     fn apply_layout(&mut self, layout: &str) {
-        // We need to build a file with a fd in order to pass the layout file to Wayland
-        // for processing
-        let keymap_size = layout.len();
-        let keymap_size_u32: u32 = keymap_size.try_into().unwrap(); // Convert it from usize to u32, panics if it is not possible
-        let keymap_size_u64: u64 = keymap_size.try_into().unwrap(); // Convert it from usize to u64, panics if it is not possible
-        let mut keymap_file = tempfile().expect("Unable to create tempfile");
+        if let Some(vk) = &self.virtual_keyboard {
+            // We need to build a file with a fd in order to pass the layout file to Wayland
+            // for processing
+            let keymap_size = layout.len();
+            let keymap_size_u32: u32 = keymap_size.try_into().unwrap(); // Convert it from usize to u32, panics if it is not possible
+            let keymap_size_u64: u64 = keymap_size.try_into().unwrap(); // Convert it from usize to u64, panics if it is not possible
+            let mut keymap_file = tempfile().expect("Unable to create tempfile");
 
-        // Allocate space in the file first
-        keymap_file.seek(SeekFrom::Start(keymap_size_u64)).unwrap();
-        keymap_file.write_all(&[0]).unwrap();
-        keymap_file.rewind().unwrap();
-        let mut data = unsafe {
-            memmap2::MmapOptions::new()
-                .map_mut(&keymap_file)
-                .expect("Could not access data from memory mapped file")
-        };
-        data[..layout.len()].copy_from_slice(layout.as_bytes());
+            // Allocate space in the file first
+            keymap_file.seek(SeekFrom::Start(keymap_size_u64)).unwrap();
+            keymap_file.write_all(&[0]).unwrap();
+            keymap_file.rewind().unwrap();
+            let mut data = unsafe {
+                memmap2::MmapOptions::new()
+                    .map_mut(&keymap_file)
+                    .expect("Could not access data from memory mapped file")
+            };
+            data[..layout.len()].copy_from_slice(layout.as_bytes());
 
-        // Get fd to pass to Wayland
-        let keymap_raw_fd = keymap_file.into_raw_fd();
-        self.virtual_keyboard
-            .keymap(1, keymap_raw_fd, keymap_size_u32);
+            // Get fd to pass to Wayland
+            let keymap_raw_fd = keymap_file.into_raw_fd();
+            vk.keymap(1, keymap_raw_fd, keymap_size_u32);
+        }
     }
 
     /// Press/Release a specific UTF-8 symbol
@@ -617,14 +627,16 @@ impl Con {
     /// # Errors
     /// TODO
     fn send_key_event(&mut self, keycode: Keycode, press: bool) {
-        let time = self.get_time();
-        let state = u32::from(press);
-        let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
+        if let Some(vk) = &self.virtual_keyboard {
+            let time = self.get_time();
+            let state = u32::from(press);
+            let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
 
-        // debug!("time:{} keycode:{}:{} state:{}", time, c, keycode, state);
+            // debug!("time:{} keycode:{}:{} state:{}", time, c, keycode, state);
 
-        // Send key event message
-        self.virtual_keyboard.key(time, keycode, state);
+            // Send key event message
+            vk.key(time, keycode, state);
+        }
     }
 
     // Try to enter the key
@@ -709,7 +721,9 @@ impl Con {
     }
 
     fn send_modifier_event(&mut self, modifiers: u32) {
-        self.virtual_keyboard.modifiers(modifiers, 0, 0, 0)
+        if let Some(vk) = &self.virtual_keyboard {
+            vk.modifiers(modifiers, 0, 0, 0)
+        }
     }
 }
 
@@ -730,8 +744,13 @@ impl Drop for Con {
         for &k in &self.held.clone() {
             self.press_key(k, Some(false));
         }
-        self.virtual_keyboard.destroy();
-        self.virtual_pointer.destroy();
+
+        if let Some(vk) = &self.virtual_keyboard {
+            vk.destroy();
+        }
+        if let Some(vp) = &self.virtual_pointer {
+            vp.destroy();
+        }
     }
 }
 
@@ -762,101 +781,110 @@ impl KeyboardControllable for Con {
 
 impl MouseControllable for Con {
     fn mouse_move_to(&mut self, x: i32, y: i32) {
-        let time = self.get_time();
-        self.virtual_pointer.motion_absolute(
-            time,
-            x.try_into().unwrap(),
-            y.try_into().unwrap(),
-            u32::MAX, // TODO: Check what would be the correct value here
-            u32::MAX, // TODO: Check what would be the correct value here
-        );
-        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        if let Some(vp) = &self.virtual_pointer {
+            let time = self.get_time();
+            vp.motion_absolute(
+                time,
+                x.try_into().unwrap(),
+                y.try_into().unwrap(),
+                u32::MAX, // TODO: Check what would be the correct value here
+                u32::MAX, // TODO: Check what would be the correct value here
+            );
+            vp.frame(); // TODO: Check if this is needed
+        }
+
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_move_relative(&mut self, x: i32, y: i32) {
-        let time = self.get_time();
-        self.virtual_pointer.motion(time, x as f64, y as f64);
-        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        if let Some(vp) = &self.virtual_pointer {
+            let time = self.get_time();
+            vp.motion(time, x as f64, y as f64);
+            vp.frame(); // TODO: Check if this is needed
+        }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_down(&mut self, button: MouseButton) {
-        let time = self.get_time();
-        let button = match button {
-            // Taken from /linux/input-event-codes.h
-            MouseButton::Left => 0x110,
-            MouseButton::Middle => 0x112,
-            MouseButton::Right => 0x111,
-            MouseButton::ScrollUp => return self.mouse_scroll_y(-1),
-            MouseButton::ScrollDown => return self.mouse_scroll_y(1),
-            MouseButton::ScrollLeft => return self.mouse_scroll_x(-1),
-            MouseButton::ScrollRight => return self.mouse_scroll_x(1),
-            MouseButton::Back => 0x116,
-            MouseButton::Forward => 0x115,
-        };
+        if let Some(vp) = &self.virtual_pointer {
+            let time = self.get_time();
+            let button = match button {
+                // Taken from /linux/input-event-codes.h
+                MouseButton::Left => 0x110,
+                MouseButton::Middle => 0x112,
+                MouseButton::Right => 0x111,
+                MouseButton::ScrollUp => return self.mouse_scroll_y(-1),
+                MouseButton::ScrollDown => return self.mouse_scroll_y(1),
+                MouseButton::ScrollLeft => return self.mouse_scroll_x(-1),
+                MouseButton::ScrollRight => return self.mouse_scroll_x(1),
+                MouseButton::Back => 0x116,
+                MouseButton::Forward => 0x115,
+            };
 
-        self.virtual_pointer
-            .button(time, button, wl_pointer::ButtonState::Pressed);
-        self.virtual_pointer.frame(); // TODO: Check if this is needed
+            vp.button(time, button, wl_pointer::ButtonState::Pressed);
+            vp.frame(); // TODO: Check if this is needed
+        }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_up(&mut self, button: MouseButton) {
-        let time = self.get_time();
-        let button = match button {
-            // Taken from /linux/input-event-codes.h
-            MouseButton::Left => 0x110,
-            MouseButton::Middle => 0x112,
-            MouseButton::Right => 0x111,
-            // Releasing one of the scroll mouse buttons has no effect
-            MouseButton::ScrollUp
-            | MouseButton::ScrollDown
-            | MouseButton::ScrollLeft
-            | MouseButton::ScrollRight => return,
-            MouseButton::Back => 0x116,
-            MouseButton::Forward => 0x115,
-        };
-        self.virtual_pointer
-            .button(time, button, wl_pointer::ButtonState::Released);
-        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        if let Some(vp) = &self.virtual_pointer {
+            let time = self.get_time();
+            let button = match button {
+                // Taken from /linux/input-event-codes.h
+                MouseButton::Left => 0x110,
+                MouseButton::Middle => 0x112,
+                MouseButton::Right => 0x111,
+                // Releasing one of the scroll mouse buttons has no effect
+                MouseButton::ScrollUp
+                | MouseButton::ScrollDown
+                | MouseButton::ScrollLeft
+                | MouseButton::ScrollRight => return,
+                MouseButton::Back => 0x116,
+                MouseButton::Forward => 0x115,
+            };
+            vp.button(time, button, wl_pointer::ButtonState::Released);
+            vp.frame(); // TODO: Check if this is needed
+        }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_click(&mut self, button: MouseButton) {
-        let time = self.get_time();
-        let button = match button {
-            // Taken from /linux/input-event-codes.h
-            MouseButton::Left => 0x110,
-            MouseButton::Middle => 0x112,
-            MouseButton::Right => 0x111,
-            MouseButton::ScrollUp => return self.mouse_scroll_y(-1),
-            MouseButton::ScrollDown => return self.mouse_scroll_y(1),
-            MouseButton::ScrollLeft => return self.mouse_scroll_x(-1),
-            MouseButton::ScrollRight => return self.mouse_scroll_x(1),
-            MouseButton::Back => 0x116,
-            MouseButton::Forward => 0x115,
-        };
-        self.virtual_pointer
-            .button(time, button, wl_pointer::ButtonState::Pressed);
-        self.virtual_pointer.frame(); // TODO: Check if this is needed
-        self.virtual_pointer
-            .button(time + 50, button, wl_pointer::ButtonState::Released);
-        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        if let Some(vp) = &self.virtual_pointer {
+            let time = self.get_time();
+            let button = match button {
+                // Taken from /linux/input-event-codes.h
+                MouseButton::Left => 0x110,
+                MouseButton::Middle => 0x112,
+                MouseButton::Right => 0x111,
+                MouseButton::ScrollUp => return self.mouse_scroll_y(-1),
+                MouseButton::ScrollDown => return self.mouse_scroll_y(1),
+                MouseButton::ScrollLeft => return self.mouse_scroll_x(-1),
+                MouseButton::ScrollRight => return self.mouse_scroll_x(1),
+                MouseButton::Back => 0x116,
+                MouseButton::Forward => 0x115,
+            };
+            vp.button(time, button, wl_pointer::ButtonState::Pressed);
+            vp.frame(); // TODO: Check if this is needed
+            vp.button(time + 50, button, wl_pointer::ButtonState::Released);
+            vp.frame(); // TODO: Check if this is needed
+        }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_scroll_x(&mut self, length: i32) {
-        // TODO: Check what the value of length should be
-        // TODO: Check if it would be better to use .axis_discrete here
-        let time = self.get_time();
-        self.virtual_pointer
-            .axis(time, wl_pointer::Axis::HorizontalScroll, length.into());
-        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        if let Some(vp) = &self.virtual_pointer {
+            // TODO: Check what the value of length should be
+            // TODO: Check if it would be better to use .axis_discrete here
+            let time = self.get_time();
+            vp.axis(time, wl_pointer::Axis::HorizontalScroll, length.into());
+            vp.frame(); // TODO: Check if this is needed
+        }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn mouse_scroll_y(&mut self, length: i32) {
-        // TODO: Check what the value of length should be
-        // TODO: Check if it would be better to use .axis_discrete here
-        let time = self.get_time();
-        self.virtual_pointer
-            .axis(time, wl_pointer::Axis::VerticalScroll, length.into());
-        self.virtual_pointer.frame(); // TODO: Check if this is needed
+        if let Some(vp) = &self.virtual_pointer {
+            // TODO: Check what the value of length should be
+            // TODO: Check if it would be better to use .axis_discrete here
+            let time = self.get_time();
+            vp.axis(time, wl_pointer::Axis::VerticalScroll, length.into());
+            vp.frame(); // TODO: Check if this is needed
+        }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
     fn main_display_size(&self) -> (i32, i32) {

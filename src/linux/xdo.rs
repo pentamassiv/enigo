@@ -78,15 +78,15 @@ fn mousebutton(button: MouseButton) -> c_int {
 
 #[allow(clippy::module_name_repetitions)]
 /// The main struct for handling the event emitting
-pub struct EnigoX11 {
+pub struct Con {
     xdo: Xdo,
     delay: u32,
 }
 // This is safe, we have a unique pointer.
 // TODO: use Unique<c_char> once stable.
-unsafe impl Send for EnigoX11 {}
+unsafe impl Send for Con {}
 
-impl Default for EnigoX11 {
+impl Default for Con {
     /// Create a new Enigo instance
     fn default() -> Self {
         Self {
@@ -95,7 +95,7 @@ impl Default for EnigoX11 {
         }
     }
 }
-impl EnigoX11 {
+impl Con {
     /// Get the delay per keypress.
     /// Default value is 12.
     /// This is Linux-specific.
@@ -109,14 +109,14 @@ impl EnigoX11 {
         self.delay = delay * 1000;
     }
 }
-impl Drop for EnigoX11 {
+impl Drop for Con {
     fn drop(&mut self) {
         unsafe {
             xdo_free(self.xdo);
         }
     }
 }
-impl MouseControllable for EnigoX11 {
+impl MouseControllable for Con {
     fn mouse_move_to(&mut self, x: i32, y: i32) {
         unsafe {
             xdo_move_mouse(self.xdo, x as c_int, y as c_int, 0);
@@ -294,7 +294,7 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
         Key::Command | Key::Super | Key::Windows | Key::Meta => "Super",
     })
 }
-impl KeyboardControllable for EnigoX11 {
+impl KeyboardControllable for Con {
     fn key_sequence(&mut self, sequence: &str) {
         let string = CString::new(sequence).unwrap();
         unsafe {

@@ -968,6 +968,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                     state.pointer_manager = Some(manager);
                 }
                 "org_kde_kwin_fake_input" => {
+                    println!("FAKE_INPUT AVAILABLE!");
                     let kde_input = registry
                         .bind::<org_kde_kwin_fake_input::OrgKdeKwinFakeInput, _, _>(
                             name,
@@ -977,7 +978,9 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         );
                     state.kde_input = Some(kde_input);
                 }
-                _ => {}
+                s => {
+                    println!("i: {s}");
+                }
             }
         }
     }

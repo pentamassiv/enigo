@@ -6,7 +6,7 @@ use libc::{c_char, c_int, c_void, useconds_t};
 use std::{borrow::Cow, ffi::CString, ptr};
 
 const CURRENT_WINDOW: c_int = 0;
-const DEFAULT_DELAY: u32 = 12;
+const DEFAULT_DELAY: u32 = 12; // milliseconds
 type Window = c_int;
 type Xdo = *const c_void;
 
@@ -80,7 +80,7 @@ fn mousebutton(button: MouseButton) -> c_int {
 /// The main struct for handling the event emitting
 pub struct Con {
     xdo: Xdo,
-    delay: u32,
+    delay: u32, // microseconds
 }
 // This is safe, we have a unique pointer.
 // TODO: use Unique<c_char> once stable.
@@ -91,19 +91,19 @@ impl Default for Con {
     fn default() -> Self {
         Self {
             xdo: unsafe { xdo_new(ptr::null()) },
-            delay: DEFAULT_DELAY,
+            delay: DEFAULT_DELAY * 1000,
         }
     }
 }
 impl Con {
-    /// Get the delay per keypress.
+    /// Get the delay per keypress in milliseconds.
     /// Default value is 12.
     /// This is Linux-specific.
     #[must_use]
     pub fn delay(&self) -> u32 {
-        self.delay * 1000
+        self.delay / 1000
     }
-    /// Set the delay per keypress.
+    /// Set the delay per keypress in milliseconds.
     /// This is Linux-specific.
     pub fn set_delay(&mut self, delay: u32) {
         self.delay = delay * 1000;

@@ -19,7 +19,8 @@ pub type Keycode = u8;
 
 type CompositorConnection = RustConnection<DefaultStream>;
 
-/// Default delay between chunks of keys that are sent to the X11 server
+/// Default delay between chunks of keys that are sent to the X11 server in
+/// milliseconds
 const DEFAULT_DELAY: u32 = 12;
 
 #[allow(clippy::module_name_repetitions)]
@@ -27,9 +28,9 @@ pub struct Con {
     connection: CompositorConnection,
     keymap: HashMap<Keysym, Keycode>,
     unused_keycodes: VecDeque<Keycode>,
-    delay: u32,
+    delay: u32, // milliseconds
     screen: Screen,
-    held: Vec<Key>,                               // Currently held keys
+    held: Vec<(Key, Keysym)>,                     // Currently held keys
     last_keys: Vec<Keycode>,                      // Last pressed keycodes
     last_event_before_delays: std::time::Instant, // Time of the last event
     pending_delays: u32,
@@ -44,11 +45,14 @@ impl Default for Con {
 impl Con {
     /// Tries to establish a new X11 connection
     ///
+    /// delay: Minimum delay between keypresses in order to properly enter all
+    /// chars in milliseconds
+    ///
     /// # Errors
     /// TODO
     pub fn new(delay: u32) -> Con {
         let (connection, screen_idx) = x11rb::connect(None).unwrap();
-        let delay = delay / 1000;
+        let delay = delay;
         let setup = connection.setup();
         let screen = setup.roots[screen_idx].clone();
         let min_keycode = setup.min_keycode;
@@ -77,17 +81,17 @@ impl Con {
         }
     }
 
-    /// Get the delay per keypress.
+    /// Get the delay per keypress in milliseconds.
     /// Default value is 12 ms.
     /// This is Linux-specific.
     #[must_use]
     pub fn delay(&self) -> u32 {
         self.delay
     }
-    /// Set the delay in ms per keypress.
+    /// Set the delay in milliseconds per keypress.
     /// This is Linux-specific.
     pub fn set_delay(&mut self, delay: u32) {
-        self.delay = delay / 1000;
+        self.delay = delay;
     }
 
     fn find_unused_keycodes(
@@ -278,7 +282,7 @@ impl Con {
 
         // e.g. A quick rabbit
         // Chunk 1: 'A quick' # Add a delay before the second space
-        // Chunk 2: 'rab'     # Add a delay before the second 'b'
+        // Chunk 2: ' rab'     # Add a delay before the second 'b'
         // Chunk 3: 'bit'     # Enter the remaining chars
 
         if self.last_keys.contains(&keycode) {
@@ -337,20 +341,21 @@ impl Con {
 
         // Unmap all keys, if all keycodes are already being used
         // TODO: Don't unmap the keycodes if they will be needed next
-        // TODO: Don't unmap held keys!
         if self.unused_keycodes.is_empty() {
             let mapped_keys = self.keymap.clone();
             for &sym in mapped_keys.keys() {
-                self.unmap_sym(sym);
+                if !self.held.iter().any(|(_, s)| *s == sym) {
+                    self.unmap_sym(sym);
+                }
             }
         }
 
-        let keycode = if let Key::Raw(kc) = key {
-            kc.try_into().unwrap()
+        let (sym, keycode) = if let Key::Raw(kc) = key {
+            (None, kc.try_into().unwrap())
         } else {
             let sym = Self::key_to_keysym(key);
             let keycode = self.get_keycode(sym).unwrap();
-            keycode
+            (Some(sym), keycode)
         };
 
         match press {
@@ -362,7 +367,9 @@ impl Con {
             Some(true) => {
                 self.update_delays(keycode);
                 self.send_key_event(keycode, true);
-                self.held.push(key);
+                if let Some(sym) = sym {
+                    self.held.push((key, sym));
+                }
             }
             Some(false) => {
                 // self.update_delays(keycode); TODO: Check if releases really don't need a
@@ -371,7 +378,7 @@ impl Con {
                 // if let Some(s) = sym {
                 //    self.unmap_sym(s);
                 // }
-                self.held.retain(|&k| k != key);
+                self.held.retain(|&(k, _)| k != key);
             }
         }
     }
@@ -444,7 +451,7 @@ impl Con {
 impl Drop for Con {
     // Release the held keys before the connection is dropped
     fn drop(&mut self) {
-        for &k in &self.held.clone() {
+        for &(k, _) in &self.held.clone() {
             self.press_key(k, Some(false));
         }
 

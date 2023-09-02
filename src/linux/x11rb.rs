@@ -45,14 +45,13 @@ impl Default for Con {
 impl Con {
     /// Tries to establish a new X11 connection
     ///
-    /// delay: Minimum delay between keypresses in order to properly enter all
-    /// chars in milliseconds
+    /// delay: Minimum delay in milliseconds between keypresses in order to
+    /// properly enter all chars
     ///
     /// # Errors
     /// TODO
     pub fn new(delay: u32) -> Con {
         let (connection, screen_idx) = x11rb::connect(None).unwrap();
-        let delay = delay;
         let setup = connection.setup();
         let screen = setup.roots[screen_idx].clone();
         let min_keycode = setup.min_keycode;
@@ -64,7 +63,7 @@ impl Con {
             !(unused_keycodes.is_empty()),
             "There was no space to map any keycodes"
         );
-        let held = Vec::new();
+        let held = vec![];
         let last_keys = vec![];
         let last_event_before_delays = std::time::Instant::now();
         let pending_delays = 0;

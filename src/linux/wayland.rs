@@ -87,6 +87,7 @@ impl Con {
         // Setup virtual keyboard & virtual pointer
         let virtual_keyboard = if let Some(seat) = state.seat.as_ref() {
             if let Some(vk_mgr) = state.keyboard_manager.as_ref() {
+                println!("Created vk mgr");
                 Some(vk_mgr.create_virtual_keyboard(seat, &qh, ()))
             } else {
                 None
@@ -773,6 +774,7 @@ impl KeyboardControllable for Con {
     }
 
     fn key_click(&mut self, key: crate::Key) {
+        println!("key_click");
         self.press_key(key, Some(true));
         self.press_key(key, Some(false));
         self.event_queue.roundtrip(&mut self.state).unwrap();

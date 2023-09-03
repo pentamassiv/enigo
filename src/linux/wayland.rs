@@ -783,8 +783,18 @@ impl Drop for Con {
 
 impl KeyboardControllable for Con {
     fn key_sequence(&mut self, string: &str) {
-        for c in string.chars() {
-            self.press_key(Key::Layout(c), None);
+        // Use the much faster and less error prone input_method protocol if it is
+        // available
+        if let Some(im) = &self.input_method {
+            im.commit_string(string.to_string());
+            im.commit(self.serial);
+            self.serial = self.serial.wrapping_add(1);
+        }
+        // otherwise fall back to using the virtual_keyboard method
+        else {
+            for c in string.chars() {
+                self.press_key(Key::Layout(c), None);
+            }
         }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
@@ -800,14 +810,8 @@ impl KeyboardControllable for Con {
     }
 
     fn key_click(&mut self, key: crate::Key) {
-        println!("key_click");
-        // self.press_key(key, Some(true));
-        //  self.press_key(key, Some(false));
-        if let Some(im) = &self.input_method {
-            im.commit_string("Hello World! here is a lot of text  ❤️💣💩🔥".to_string());
-            im.commit(self.serial);
-            self.serial = self.serial.wrapping_add(1);
-        }
+        self.press_key(key, Some(true));
+        self.press_key(key, Some(false));
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 }

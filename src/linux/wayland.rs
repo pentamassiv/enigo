@@ -785,17 +785,17 @@ impl KeyboardControllable for Con {
     fn key_sequence(&mut self, string: &str) {
         // Use the much faster and less error prone input_method protocol if it is
         // available
-        if let Some(im) = &self.input_method {
+        /*if let Some(im) = &self.input_method {
             im.commit_string(string.to_string());
             im.commit(self.serial);
             self.serial = self.serial.wrapping_add(1);
         }
         // otherwise fall back to using the virtual_keyboard method
-        else {
-            for c in string.chars() {
-                self.press_key(Key::Layout(c), None);
-            }
+        else {*/
+        for c in string.chars() {
+            self.press_key(Key::Layout(c), None);
         }
+        // }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 

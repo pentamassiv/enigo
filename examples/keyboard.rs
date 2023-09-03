@@ -7,7 +7,13 @@ fn main() {
 
     // select all
     thread::sleep(Duration::from_secs(30));
+
+    // write text
+    enigo.key_sequence("Hello World! here is a lot of text  ❤️");
+    enigo.key_sequence("💣💩🔥");
+
+    // select all
+    enigo.key_down(Key::Control);
     enigo.key_click(Key::Layout('a'));
-    thread::sleep(Duration::from_secs(10));
-    enigo.key_click(Key::Layout('a'));
+    enigo.key_up(Key::Control);
 }

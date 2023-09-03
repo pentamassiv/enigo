@@ -239,6 +239,17 @@ impl Con {
                 self.bind_key(unused_keycode, keysym);
                 self.keymap.insert(keysym, unused_keycode);
                 println!("keymap insert: {:?}", self.keymap);
+                println!();
+
+                let GetKeyboardMappingReply { keysyms, .. } = self
+                    .connection
+                    .get_keyboard_mapping(8, 255 - 8)
+                    .unwrap()
+                    .reply()
+                    .unwrap();
+
+                println!("{:?}", keysyms);
+                println!("---------------");
                 Ok(unused_keycode)
             }
             // All keycodes are being used. A mapping is not possible
@@ -253,6 +264,17 @@ impl Con {
             self.unused_keycodes.push_back(keycode);
             self.keymap.remove(&keysym);
             println!("keymap remove: {:?}", self.keymap);
+            println!();
+
+            let GetKeyboardMappingReply { keysyms, .. } = self
+                .connection
+                .get_keyboard_mapping(8, 255 - 8)
+                .unwrap()
+                .reply()
+                .unwrap();
+
+            println!("{:?}", keysyms);
+            println!("---------------");
         }
     }
 
@@ -465,6 +487,17 @@ impl Drop for Con {
             // it can get reused
             self.bind_key(keycode, KEY_NoSymbol);
         }
+        println!();
+
+        let GetKeyboardMappingReply { keysyms, .. } = self
+            .connection
+            .get_keyboard_mapping(8, 255 - 8)
+            .unwrap()
+            .reply()
+            .unwrap();
+
+        println!("{:?}", keysyms);
+        println!("---------------");
     }
 }
 

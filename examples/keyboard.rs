@@ -4,7 +4,13 @@ use std::time::Duration;
 
 fn main() {
     let mut enigo = Enigo::new();
+
+    // select all
     thread::sleep(Duration::from_secs(5));
+
+    // write text
+    enigo.key_sequence("Hello World! here is a lot of text  ❤️");
+    enigo.key_sequence("💣💩🔥");
 
     // select all
     enigo.key_down(Key::Control);

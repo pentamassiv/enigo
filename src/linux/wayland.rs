@@ -141,6 +141,8 @@ impl Con {
         let modifiers = 0x0;
         let held = Vec::with_capacity(255 - 7);
         let base_time = Instant::now();
+
+        event_queue.roundtrip(&mut state).unwrap();
         Ok(Con {
             connection,
             keymap,

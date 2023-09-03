@@ -6,7 +6,7 @@ fn main() {
     let mut enigo = Enigo::new();
 
     // select all
-    thread::sleep(Duration::from_secs(30));
+    thread::sleep(Duration::from_secs(5));
 
     // write text
     enigo.key_sequence("Hello World! here is a lot of text  ❤️");

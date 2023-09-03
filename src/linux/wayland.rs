@@ -772,6 +772,9 @@ impl Drop for Con {
         if let Some(vk) = &self.virtual_keyboard {
             vk.destroy();
         }
+        if let Some(im) = &self.input_method {
+            im.destroy();
+        }
         if let Some(vp) = &self.virtual_pointer {
             vp.destroy();
         }
@@ -1166,5 +1169,16 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
         _qh: &QueueHandle<Self>,
     ) {
         // println!("Got a virtual keyboard event {event:?}");
+    }
+}
+
+impl Drop for WaylandState {
+    fn drop(&mut self) {
+        if let Some(im_mgr) = self.im_manager.as_ref() {
+            im_mgr.destroy()
+        }
+        if let Some(pointer_mgr) = self.pointer_manager.as_ref() {
+            pointer_mgr.destroy()
+        }
     }
 }

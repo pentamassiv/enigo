@@ -238,7 +238,7 @@ impl Con {
             Some(unused_keycode) => {
                 self.bind_key(unused_keycode, keysym);
                 self.keymap.insert(keysym, unused_keycode);
-                println!("keymap insert: {}", self.keymap);
+                println!("keymap insert: {:?}", self.keymap);
                 Ok(unused_keycode)
             }
             // All keycodes are being used. A mapping is not possible
@@ -252,7 +252,7 @@ impl Con {
             self.bind_key(keycode, KEY_NoSymbol);
             self.unused_keycodes.push_back(keycode);
             self.keymap.remove(&keysym);
-            println!("keymap remove: {}", self.keymap);
+            println!("keymap remove: {:?}", self.keymap);
         }
     }
 

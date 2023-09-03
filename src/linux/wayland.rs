@@ -48,12 +48,15 @@ impl Con {
     /// # Errors
     /// TODO
     pub fn new() -> Result<Con, ConnectionError> {
+        println!("Try wayland connection");
         // Setup Wayland Connection
         let connection = Connection::connect_to_env();
         let connection = match connection {
             Ok(connection) => connection,
             Err(e) => {
-                // error!("Failed to connect to Wayland");
+                println!(
+                    "Failed to connect to Wayland. Try setting 'export WAYLAND_DISPLAY=wayland-0'"
+                );
                 return Err(ConnectionError::Connection(e.to_string()));
             }
         };

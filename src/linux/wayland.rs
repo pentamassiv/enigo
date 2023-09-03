@@ -53,7 +53,6 @@ impl Con {
     /// # Errors
     /// TODO
     pub fn new() -> Result<Con, ConnectionError> {
-        println!("Try wayland connection");
         // Setup Wayland Connection
         let connection = Connection::connect_to_env();
         let connection = match connection {
@@ -95,7 +94,6 @@ impl Con {
         // Setup virtual keyboard
         let virtual_keyboard = if let Some(seat) = state.seat.as_ref() {
             if let Some(vk_mgr) = state.keyboard_manager.as_ref() {
-                println!("Created vk mgr");
                 Some(vk_mgr.create_virtual_keyboard(seat, &qh, ()))
             } else {
                 None
@@ -107,7 +105,6 @@ impl Con {
         // Setup input method
         let input_method = if let Some(seat) = state.seat.as_ref() {
             if let Some(im_mgr) = state.im_manager.as_ref() {
-                println!("Created im mgr");
                 Some(im_mgr.get_input_method(seat, &qh, ()))
             } else {
                 None

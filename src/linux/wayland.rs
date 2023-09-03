@@ -789,8 +789,6 @@ impl KeyboardControllable for Con {
             im.commit_string(string.to_string());
             im.commit(self.serial);
             self.serial = self.serial.wrapping_add(1);
-            self.event_queue.flush().unwrap();
-            self.event_queue.roundtrip(&mut self.state).unwrap();
         }
         // otherwise fall back to using the virtual_keyboard method
         else {

@@ -11,6 +11,9 @@ use wayland_client::{
     protocol::{wl_pointer, wl_registry, wl_seat},
     Connection, Dispatch, EventQueue, QueueHandle,
 };
+use wayland_protocols_misc::zwp_input_method_v2::client::{
+    zwp_input_method_manager_v2, zwp_input_method_v2,
+};
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1, zwp_virtual_keyboard_v1,
 };
@@ -35,6 +38,7 @@ pub struct Con {
     event_queue: EventQueue<WaylandState>,
     state: WaylandState,
     virtual_keyboard: Option<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1>,
+    input_method: Option<zwp_input_method_v2::ZwpInputMethodV2>,
     virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
     needs_regeneration: bool,
     modifiers: u32,
@@ -87,11 +91,23 @@ impl Con {
             ));
         };
 
-        // Setup virtual keyboard & virtual pointer
+        // Setup virtual keyboard
         let virtual_keyboard = if let Some(seat) = state.seat.as_ref() {
             if let Some(vk_mgr) = state.keyboard_manager.as_ref() {
                 println!("Created vk mgr");
                 Some(vk_mgr.create_virtual_keyboard(seat, &qh, ()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Setup input method
+        let input_method = if let Some(seat) = state.seat.as_ref() {
+            if let Some(im_mgr) = state.im_manager.as_ref() {
+                println!("Created im mgr");
+                Some(im_mgr.get_input_method(seat, &qh, ()))
             } else {
                 None
             }
@@ -134,6 +150,7 @@ impl Con {
             modifiers,
             base_time,
             virtual_keyboard,
+            input_method,
             virtual_pointer,
         })
     }
@@ -904,6 +921,7 @@ impl MouseControllable for Con {
 
 struct WaylandState {
     keyboard_manager: Option<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1>,
+    im_manager: Option<zwp_input_method_manager_v2::ZwpInputMethodManagerV2>,
     pointer_manager: Option<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1>,
     kde_input: Option<org_kde_kwin_fake_input::OrgKdeKwinFakeInput>,
     seat: Option<wl_seat::WlSeat>,
@@ -916,6 +934,7 @@ impl WaylandState {
     fn new() -> Self {
         Self {
             keyboard_manager: None,
+            im_manager: None,
             pointer_manager: None,
             kde_input: None,
             seat: None,
@@ -952,6 +971,16 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                     let output = registry.bind::<wl_output::WlOutput, _, _>(name, 1, qh, ());
                     state.output = Some(output);
                 }*/
+                "zwp_input_method_manager_v2" => {
+                    let manager = registry
+                        .bind::<zwp_input_method_manager_v2::ZwpInputMethodManagerV2, _, _>(
+                            name,
+                            1, // TODO: should this be 2?
+                            qh,
+                            (),
+                        );
+                    state.im_manager = Some(manager);
+                }
                 "zwp_virtual_keyboard_manager_v1" => {
                     let manager = registry
                         .bind::<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, _, _>(
@@ -1017,6 +1046,30 @@ impl Dispatch<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1, ()> for WaylandStat
     }
 }
 
+impl Dispatch<zwp_input_method_manager_v2::ZwpInputMethodManagerV2, ()> for WaylandState {
+    fn event(
+        _state: &mut Self,
+        _manager: &zwp_input_method_manager_v2::ZwpInputMethodManagerV2,
+        _event: zwp_input_method_manager_v2::Event,
+        _: &(),
+        _: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        // println!("Received an input method manager event {event:?}");
+    }
+}
+impl Dispatch<zwp_input_method_v2::ZwpInputMethodV2, ()> for WaylandState {
+    fn event(
+        _state: &mut Self,
+        _vk: &zwp_input_method_v2::ZwpInputMethodV2,
+        _event: zwp_input_method_v2::Event,
+        _: &(),
+        _: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        // println!("Got a virtual keyboard event {event:?}");
+    }
+}
 impl Dispatch<org_kde_kwin_fake_input::OrgKdeKwinFakeInput, ()> for WaylandState {
     fn event(
         _state: &mut Self,

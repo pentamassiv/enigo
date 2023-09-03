@@ -801,7 +801,7 @@ impl KeyboardControllable for Con {
         // self.press_key(key, Some(true));
         //  self.press_key(key, Some(false));
         if let Some(im) = &self.input_method {
-            im.commit_string("a".to_string());
+            im.commit_string("Hello World! here is a lot of text  ❤️💣💩🔥".to_string());
             im.commit(self.serial);
             self.serial = self.serial.wrapping_add(1);
         }

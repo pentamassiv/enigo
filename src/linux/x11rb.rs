@@ -111,6 +111,8 @@ impl Con {
             .reply()
             .unwrap();
 
+        print_keymap(keysyms.clone());
+
         // Split the mapping into the chunks of keysyms that are mapped to each keycode
         let keysyms = keysyms.chunks(keysyms_per_keycode as usize);
         for (syms, kc) in keysyms.zip(keycode_min..=keycode_max) {
@@ -247,8 +249,7 @@ impl Con {
                     .unwrap()
                     .reply()
                     .unwrap();
-
-                println!("{:?}", keysyms);
+                print_keymap(keysyms);
                 println!("---------------");
                 Ok(unused_keycode)
             }
@@ -272,8 +273,7 @@ impl Con {
                 .unwrap()
                 .reply()
                 .unwrap();
-
-            println!("{:?}", keysyms);
+            print_keymap(keysyms);
             println!("---------------");
         }
     }
@@ -496,7 +496,7 @@ impl Drop for Con {
             .reply()
             .unwrap();
 
-        println!("{:?}", keysyms);
+        print_keymap(keysyms);
         println!("---------------");
     }
 }
@@ -597,5 +597,12 @@ impl MouseControllable for Con {
             .reply()
             .unwrap();
         (reply.root_x as i32, reply.root_y as i32)
+    }
+}
+
+fn print_keymap(keysyms: Vec<u32>) {
+    let keysyms = keysyms.chunks(4);
+    for (syms, kc) in keysyms.zip(8..=255) {
+        println!("{} {:?}", kc, syms);
     }
 }

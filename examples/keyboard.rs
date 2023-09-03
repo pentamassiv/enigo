@@ -7,7 +7,6 @@ fn main() {
     let mut enigo = Enigo::new();
 
     // select all
-    enigo.key_click(Key::Layout('a'));
-    enigo.key_click(Key::Layout('b'));
-    enigo.key_click(Key::Control);
+    enigo.key_click(Key::UpArrow);
+    enigo.key_click(Key::LeftArrow);
 }

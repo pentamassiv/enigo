@@ -39,6 +39,7 @@ pub struct Con {
     state: WaylandState,
     virtual_keyboard: Option<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1>,
     input_method: Option<zwp_input_method_v2::ZwpInputMethodV2>,
+    serial: u32,
     virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
     needs_regeneration: bool,
     modifiers: u32,
@@ -114,6 +115,7 @@ impl Con {
         } else {
             None
         };
+        let serial = 0;
 
         // Setup virtual pointer
         let virtual_pointer = if let Some(vp_mgr) = state.pointer_manager.as_ref() {
@@ -151,6 +153,7 @@ impl Con {
             base_time,
             virtual_keyboard,
             input_method,
+            serial,
             virtual_pointer,
         })
     }
@@ -795,8 +798,13 @@ impl KeyboardControllable for Con {
 
     fn key_click(&mut self, key: crate::Key) {
         println!("key_click");
-        self.press_key(key, Some(true));
-        self.press_key(key, Some(false));
+        // self.press_key(key, Some(true));
+        //  self.press_key(key, Some(false));
+        if let Some(im) = &self.input_method {
+            im.commit_string("a".to_string());
+            im.commit(self.serial);
+            self.serial = self.serial.wrapping_add(1);
+        }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 }

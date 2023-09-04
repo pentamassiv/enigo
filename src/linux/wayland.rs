@@ -132,7 +132,7 @@ impl Con {
             unused_keycodes.push_back(n);
         }
         let needs_regeneration = true;
-        let modifiers = 0x0;
+        let modifiers = 0;
         let held = Vec::with_capacity(255 - 7);
         let base_time = Instant::now();
 

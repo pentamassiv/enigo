@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
+use std::fmt;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::AsFd as _;
 use std::time::Instant;
@@ -29,138 +30,23 @@ use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 pub type Keycode = u32;
 
-pub struct Con {
+struct KeyMap {
     keymap: HashMap<Keysym, Keycode>, // UTF-8 -> (keysym, keycode, refcount)
     unused_keycodes: VecDeque<Keycode>, // Used to keep track of unused keycodes
-    event_queue: EventQueue<WaylandState>,
-    state: WaylandState,
-    virtual_keyboard: Option<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1>,
-    input_method: Option<zwp_input_method_v2::ZwpInputMethodV2>,
-    serial: u32,
-    virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
     needs_regeneration: bool,
     modifiers: u32,
     held: Vec<Key>,
-    base_time: std::time::Instant,
 }
 
-impl Con {
-    /// Tries to establish a new Wayland connection
-    ///
-    /// # Errors
-    /// TODO
-    pub fn new() -> Result<Con, ConnectionError> {
-        // Setup Wayland Connection
-        let connection = Connection::connect_to_env();
-        let connection = match connection {
-            Ok(connection) => connection,
-            Err(e) => {
-                println!(
-                    "Failed to connect to Wayland. Try setting 'export WAYLAND_DISPLAY=wayland-0'"
-                );
-                return Err(ConnectionError::Connection(e.to_string()));
-            }
-        };
-
-        // Check to see if there was an error trying to connect
-        if let Some(err) = connection.protocol_error() {
-            //  error!(
-            //     "Unknown Wayland initialization failure: {} {} {} {}",
-            //      err.code, err.object_id, err.object_interface, err.message
-            // );
-            return Err(ConnectionError::General(err.to_string()));
-        }
-
-        // Create the event queue
-        let mut event_queue = connection.new_event_queue();
-        // Get queue handle
-        let qh = event_queue.handle();
-
-        // Start registry
-        let display = connection.display();
-        display.get_registry(&qh, ());
-
-        // Setup VKState and dispatch events
-        let mut state = WaylandState::new();
-        if event_queue.roundtrip(&mut state).is_err() {
-            return Err(ConnectionError::General(
-                "Roundtrip not possible".to_string(),
-            ));
-        };
-
-        // Setup virtual keyboard
-        let virtual_keyboard = if let Some(seat) = state.seat.as_ref() {
-            if let Some(vk_mgr) = state.keyboard_manager.as_ref() {
-                Some(vk_mgr.create_virtual_keyboard(seat, &qh, ()))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // Setup input method
-        let input_method = if let Some(seat) = state.seat.as_ref() {
-            if let Some(im_mgr) = state.im_manager.as_ref() {
-                Some(im_mgr.get_input_method(seat, &qh, ()))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        let serial = 0;
-
-        // Setup virtual pointer
-        let virtual_pointer = if let Some(vp_mgr) = state.pointer_manager.as_ref() {
-            Some(vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ()))
-        } else {
-            None
-        };
-
-        // Try to authenticate for the KDE Fake Input protocol
-        if let Some(kde_input) = &state.kde_input {
-            let application = "enigo".to_string();
-            let reason = "enter keycodes or move the mouse".to_string();
-            kde_input.authenticate(application, reason);
-        }
-
-        // Only keycodes from 8 to 255 can be used
-        let keymap = HashMap::with_capacity(255 - 7);
-        let mut unused_keycodes = VecDeque::with_capacity(255 - 7); // All keycodes are unused when initialized
-        for n in 8..=255 {
-            unused_keycodes.push_back(n);
-        }
-        let needs_regeneration = true;
-        let modifiers = 0;
-        let held = Vec::with_capacity(255 - 7);
-        let base_time = Instant::now();
-
-        Ok(Con {
-            keymap,
-            unused_keycodes,
-            held,
-            event_queue,
-            state,
-            needs_regeneration,
-            modifiers,
-            base_time,
-            virtual_keyboard,
-            input_method,
-            serial,
-            virtual_pointer,
-        })
-    }
-
-    /// Generates a single-level keymap.
-    ///
-    /// # Errors
-    /// The only way this can throw an error is if the generated String is not
-    /// valid UTF8
-    fn generate_keymap_string(&mut self) -> Result<String, ConnectionError> {
-        let mut buf: Vec<u8> = Vec::new();
-        writeln!(
-            buf,
+/// Generates a single-level keymap.
+///
+/// # Errors
+/// The only way this can throw an error is if the generated String is not
+/// valid UTF8
+impl fmt::Display for KeyMap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             "xkb_keymap {{
         xkb_keycodes {{
             minimum = 8;
@@ -447,7 +333,7 @@ impl Con {
         )?;
         for (&keysym, &keycode) in &self.keymap {
             write!(
-                buf,
+                f,
                 "
             key <I{}> {{ [ {} ] }}; // \\n",
                 keycode,
@@ -455,14 +341,34 @@ impl Con {
             )?;
         }
         writeln!(
-            buf,
+            f,
             "
         }};
         
     }};"
-        )?;
+        )
+    }
+}
 
-        String::from_utf8(buf).map_err(ConnectionError::Utf)
+impl KeyMap {
+    /// Create a new KeyMap
+    pub fn new() -> Result<Self, ConnectionError> {
+        // Only keycodes from 8 to 255 can be used
+        let keymap = HashMap::with_capacity(255 - 7);
+        let mut unused_keycodes = VecDeque::with_capacity(255 - 7); // All keycodes are unused when initialized
+        for n in 8..=255 {
+            unused_keycodes.push_back(n);
+        }
+        let needs_regeneration = true;
+        let modifiers = 0;
+        let held = Vec::with_capacity(255 - 7);
+        Ok(Self {
+            keymap,
+            unused_keycodes,
+            held,
+            needs_regeneration,
+            modifiers,
+        })
     }
 
     fn get_keycode(&mut self, keysym: Keysym) -> Result<Keycode, ConnectionError> {
@@ -598,6 +504,164 @@ impl Con {
         }
     }
 
+    /// Check if there are still unused keycodes available. If there aren't,
+    /// make some room by freeing the mapped keycodes Returns true, if keys
+    /// were unmapped and the keymap needs to be regenerated
+    fn make_room(&mut self) -> bool {
+        // Unmap all keys, if all keycodes are already being used
+        // TODO: Don't unmap the keycodes if they will be needed next
+        // TODO: Don't unmap held keys!
+        if self.unused_keycodes.is_empty() {
+            let mapped_keys = self.keymap.clone();
+            for &sym in mapped_keys.keys() {
+                self.unmap_sym(sym);
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Check if a new keymap is available
+    /// Return it if it is
+    pub fn new_keymap(&mut self) -> Option<String> {
+        if self.needs_regeneration {
+            self.needs_regeneration = false;
+            return Some(self.to_string());
+        }
+        None
+    }
+
+    fn press_modifier(&mut self, pressed_modifier: u32) -> u32 {
+        self.modifiers |= pressed_modifier;
+        self.modifiers
+    }
+
+    fn release_modifier(&mut self, released_modifier: u32) -> u32 {
+        self.modifiers &= !released_modifier;
+        self.modifiers
+    }
+
+    fn pressed(&mut self, key: Key) {
+        self.held.push(key);
+    }
+
+    fn released(&mut self, key: Key) {
+        self.held.retain(|&k| k != key);
+    }
+
+    fn held(&mut self) -> Vec<Key> {
+        self.held.clone()
+    }
+}
+
+pub struct Con {
+    keymap: KeyMap,
+    event_queue: EventQueue<WaylandState>,
+    state: WaylandState,
+    virtual_keyboard: Option<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1>,
+    input_method: Option<zwp_input_method_v2::ZwpInputMethodV2>,
+    serial: u32,
+    virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
+    base_time: std::time::Instant,
+}
+
+impl Con {
+    /// Tries to establish a new Wayland connection
+    ///
+    /// # Errors
+    /// TODO
+    pub fn new() -> Result<Self, ConnectionError> {
+        // Setup Wayland Connection
+        let connection = Connection::connect_to_env();
+        let connection = match connection {
+            Ok(connection) => connection,
+            Err(e) => {
+                println!(
+                    "Failed to connect to Wayland. Try setting 'export WAYLAND_DISPLAY=wayland-0'"
+                );
+                return Err(ConnectionError::Connection(e.to_string()));
+            }
+        };
+
+        // Check to see if there was an error trying to connect
+        if let Some(err) = connection.protocol_error() {
+            //  error!(
+            //     "Unknown Wayland initialization failure: {} {} {} {}",
+            //      err.code, err.object_id, err.object_interface, err.message
+            // );
+            return Err(ConnectionError::General(err.to_string()));
+        }
+
+        // Create the event queue
+        let mut event_queue = connection.new_event_queue();
+        // Get queue handle
+        let qh = event_queue.handle();
+
+        // Start registry
+        let display = connection.display();
+        display.get_registry(&qh, ());
+
+        // Setup VKState and dispatch events
+        let mut state = WaylandState::new();
+        if event_queue.roundtrip(&mut state).is_err() {
+            return Err(ConnectionError::General(
+                "Roundtrip not possible".to_string(),
+            ));
+        };
+
+        // Setup virtual keyboard
+        let virtual_keyboard = if let Some(seat) = state.seat.as_ref() {
+            if let Some(vk_mgr) = state.keyboard_manager.as_ref() {
+                Some(vk_mgr.create_virtual_keyboard(seat, &qh, ()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Setup input method
+        let input_method = if let Some(seat) = state.seat.as_ref() {
+            if let Some(im_mgr) = state.im_manager.as_ref() {
+                Some(im_mgr.get_input_method(seat, &qh, ()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let serial = 0;
+
+        // Setup virtual pointer
+        let virtual_pointer = if let Some(vp_mgr) = state.pointer_manager.as_ref() {
+            Some(vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ()))
+        } else {
+            None
+        };
+
+        // Try to authenticate for the KDE Fake Input protocol
+        if let Some(kde_input) = &state.kde_input {
+            let application = "enigo".to_string();
+            let reason = "enter keycodes or move the mouse".to_string();
+            kde_input.authenticate(application, reason);
+        }
+
+        let base_time = Instant::now();
+
+        let keymap = KeyMap::new().expect("Could not create the key map");
+
+        Ok(Self {
+            keymap,
+            event_queue,
+            state,
+            base_time,
+            virtual_keyboard,
+            input_method,
+            serial,
+            virtual_pointer,
+        })
+    }
+
     /// Used to apply ms timestamps for Wayland key events
     fn get_time(&self) -> u32 {
         let duration = self.base_time.elapsed();
@@ -668,37 +732,32 @@ impl Con {
             return;
         }
 
-        // Unmap all keys, if all keycodes are already being used
-        // TODO: Don't unmap the keycodes if they will be needed next
-        // TODO: Don't unmap held keys!
-        if self.unused_keycodes.is_empty() {
-            let mapped_keys = self.keymap.clone();
-            for &sym in mapped_keys.keys() {
-                self.unmap_sym(sym);
-            }
+        if self.keymap.make_room() {
             self.event_queue.roundtrip(&mut self.state).unwrap();
         }
 
         let keycode = if let Key::Raw(kc) = key {
             kc.try_into().unwrap()
         } else {
-            let sym = Self::key_to_keysym(key);
-            let keycode = self.get_keycode(sym).unwrap();
+            let sym = KeyMap::key_to_keysym(key);
+            let keycode = self.keymap.get_keycode(sym).unwrap();
             keycode
         };
 
-        if self.needs_regeneration {
-            let keymap = self.generate_keymap_string().unwrap();
-            self.apply_layout(&keymap);
-            self.needs_regeneration = false;
+        // Apply the new keymap if there were any changes
+        if let Some(keymap_string) = self.keymap.new_keymap() {
+            self.apply_layout(&keymap_string);
         }
+
         let modifier = self.is_modifier(key);
 
         match press {
             None => {
                 if let Some(m) = modifier {
-                    self.send_modifier_event(self.modifiers | m);
-                    self.send_modifier_event(self.modifiers);
+                    let modifiers = self.keymap.press_modifier(m);
+                    self.send_modifier_event(modifiers);
+                    let modifiers = self.keymap.release_modifier(m);
+                    self.send_modifier_event(modifiers);
                 } else {
                     self.send_key_event(keycode, true);
                     self.send_key_event(keycode, false);
@@ -706,21 +765,21 @@ impl Con {
             }
             Some(true) => {
                 if let Some(m) = modifier {
-                    self.modifiers |= m;
-                    self.send_modifier_event(self.modifiers);
+                    let modifiers = self.keymap.press_modifier(m);
+                    self.send_modifier_event(modifiers);
                 } else {
                     self.send_key_event(keycode, true);
                 }
-                self.held.push(key);
+                self.keymap.pressed(key);
             }
             Some(false) => {
                 if let Some(m) = modifier {
-                    self.modifiers &= !m;
-                    self.send_modifier_event(self.modifiers);
+                    let modifiers = self.keymap.release_modifier(m);
+                    self.send_modifier_event(modifiers);
                 } else {
                     self.send_key_event(keycode, false);
                 }
-                self.held.retain(|&k| k != key);
+                self.keymap.released(key);
             }
         }
     }
@@ -760,7 +819,7 @@ enum Modifier {
 impl Drop for Con {
     // Release the held keys before the connection is dropped
     fn drop(&mut self) {
-        for &k in &self.held.clone() {
+        for &k in &self.keymap.held() {
             self.press_key(k, Some(false));
         }
 

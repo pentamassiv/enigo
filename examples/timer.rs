@@ -4,8 +4,10 @@ use std::time::Duration;
 use std::time::Instant;
 
 fn main() {
-    thread::sleep(Duration::from_secs(2));
+    let wait_time = Duration::from_secs(2);
     let mut enigo = Enigo::new();
+
+    thread::sleep(Duration::from_secs(wait_time.as_secs()));
 
     let now = Instant::now();
 

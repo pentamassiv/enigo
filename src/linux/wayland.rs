@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::io::{Seek, SeekFrom, Write};
-use std::os::unix::io::IntoRawFd;
+use std::os::fd::AsFd as _;
 use std::time::Instant;
 
 use tempfile::tempfile;
@@ -637,7 +637,7 @@ impl Con {
             data[..layout.len()].copy_from_slice(layout.as_bytes());
 
             // Get fd to pass to Wayland
-            let keymap_raw_fd = keymap_file.into_raw_fd();
+            let keymap_raw_fd = keymap_file.as_fd();
             vk.keymap(1, keymap_raw_fd, keymap_size_u32);
         }
     }

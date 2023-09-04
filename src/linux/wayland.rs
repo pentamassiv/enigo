@@ -29,10 +29,7 @@ use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 pub type Keycode = u32;
 
-type CompositorConnection = Connection;
-
 pub struct Con {
-    connection: Connection,
     keymap: HashMap<Keysym, Keycode>, // UTF-8 -> (keysym, keycode, refcount)
     unused_keycodes: VecDeque<Keycode>, // Used to keep track of unused keycodes
     event_queue: EventQueue<WaylandState>,
@@ -140,7 +137,6 @@ impl Con {
         let base_time = Instant::now();
 
         Ok(Con {
-            connection,
             keymap,
             unused_keycodes,
             held,

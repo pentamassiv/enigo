@@ -8,6 +8,9 @@ fn main() {
 
     thread::sleep(Duration::from_secs(wait_time.as_secs()));
 
+    // write text
+    enigo.key_sequence("Hello World! here is a lot of text  ❤️");
+
     // select all
     enigo.key_down(Key::Control);
     enigo.key_click(Key::Layout('a'));

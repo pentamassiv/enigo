@@ -10,9 +10,9 @@ use x11rb::protocol::{
 use x11rb::rust_connection::{DefaultStream, RustConnection};
 use x11rb::{connection::Connection, wrapper::ConnectionExt as _};
 
-use xkbcommon::xkb::{keysym_from_name, keysyms, KEY_NoSymbol, KEYSYM_NO_FLAGS};
+use xkbcommon::xkb::{keysym_from_name, KEYSYM_NO_FLAGS};
 
-use super::{ConnectionError, Keysym};
+use super::{ConnectionError, Keysym, NO_SYMBOL};
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 pub type Keycode = u8;
@@ -117,7 +117,7 @@ impl Con {
         let keysyms = keysyms.chunks(keysyms_per_keycode as usize);
         for (syms, kc) in keysyms.zip(keycode_min..=keycode_max) {
             // Check if the keycode is unused
-            if syms.iter().all(|&s| s == KEY_NoSymbol) {
+            if syms.iter().all(|&s| s == NO_SYMBOL.raw()) {
                 unused_keycodes.push_back(kc);
             }
         }
@@ -138,9 +138,10 @@ impl Con {
     fn key_to_keysym(key: Key) -> Keysym {
         match key {
             Key::Layout(c) => match c {
-                '\n' => keysyms::KEY_Return,
-                '\t' => keysyms::KEY_Tab,
+                '\n' => Keysym::Return,
+                '\t' => Keysym::Tab,
                 _ => {
+                    // TODO: Replace with Keysym.from_char(ch: char)
                     let hex: u32 = c.into();
                     let name = format!("U{hex:x}");
                     keysym_from_name(&name, KEYSYM_NO_FLAGS)
@@ -150,87 +151,87 @@ impl Con {
                 // Raw keycodes cannot be converted to keysyms
                 panic!("Attempted to convert raw keycode {k} to keysym");
             }
-            Key::Alt | Key::LAlt | Key::Option => keysyms::KEY_Alt_L,
-            Key::Backspace => keysyms::KEY_BackSpace,
-            Key::Begin => keysyms::KEY_Begin,
-            Key::Break => keysyms::KEY_Break,
-            Key::Cancel => keysyms::KEY_Cancel,
-            Key::CapsLock => keysyms::KEY_Caps_Lock,
-            Key::Clear => keysyms::KEY_Clear,
-            Key::Control | Key::LControl => keysyms::KEY_Control_L,
-            Key::Delete => keysyms::KEY_Delete,
-            Key::DownArrow => keysyms::KEY_Down,
-            Key::End => keysyms::KEY_End,
-            Key::Escape => keysyms::KEY_Escape,
-            Key::Execute => keysyms::KEY_Execute,
-            Key::F1 => keysyms::KEY_F1,
-            Key::F2 => keysyms::KEY_F2,
-            Key::F3 => keysyms::KEY_F3,
-            Key::F4 => keysyms::KEY_F4,
-            Key::F5 => keysyms::KEY_F5,
-            Key::F6 => keysyms::KEY_F6,
-            Key::F7 => keysyms::KEY_F7,
-            Key::F8 => keysyms::KEY_F8,
-            Key::F9 => keysyms::KEY_F9,
-            Key::F10 => keysyms::KEY_F10,
-            Key::F11 => keysyms::KEY_F11,
-            Key::F12 => keysyms::KEY_F12,
-            Key::F13 => keysyms::KEY_F13,
-            Key::F14 => keysyms::KEY_F14,
-            Key::F15 => keysyms::KEY_F15,
-            Key::F16 => keysyms::KEY_F16,
-            Key::F17 => keysyms::KEY_F17,
-            Key::F18 => keysyms::KEY_F18,
-            Key::F19 => keysyms::KEY_F19,
-            Key::F20 => keysyms::KEY_F20,
-            Key::F21 => keysyms::KEY_F21,
-            Key::F22 => keysyms::KEY_F22,
-            Key::F23 => keysyms::KEY_F23,
-            Key::F24 => keysyms::KEY_F24,
-            Key::F25 => keysyms::KEY_F25,
-            Key::F26 => keysyms::KEY_F26,
-            Key::F27 => keysyms::KEY_F27,
-            Key::F28 => keysyms::KEY_F28,
-            Key::F29 => keysyms::KEY_F29,
-            Key::F30 => keysyms::KEY_F30,
-            Key::F31 => keysyms::KEY_F31,
-            Key::F32 => keysyms::KEY_F32,
-            Key::F33 => keysyms::KEY_F33,
-            Key::F34 => keysyms::KEY_F34,
-            Key::F35 => keysyms::KEY_F35,
-            Key::Find => keysyms::KEY_Find,
-            Key::Hangul => keysyms::KEY_Hangul,
-            Key::Hanja => keysyms::KEY_Hangul_Hanja,
-            Key::Help => keysyms::KEY_Help,
-            Key::Home => keysyms::KEY_Home,
-            Key::Insert => keysyms::KEY_Insert,
-            Key::Kanji => keysyms::KEY_Kanji,
-            Key::LeftArrow => keysyms::KEY_Left,
-            Key::Linefeed => keysyms::KEY_Linefeed,
-            Key::LMenu => keysyms::KEY_Menu,
-            Key::ModeChange => keysyms::KEY_Mode_switch,
-            Key::Numlock => keysyms::KEY_Num_Lock,
-            Key::PageDown => keysyms::KEY_Page_Down,
-            Key::PageUp => keysyms::KEY_Page_Up,
-            Key::Pause => keysyms::KEY_Pause,
-            Key::Print => keysyms::KEY_Print,
-            Key::RAlt => keysyms::KEY_Alt_R,
-            Key::RControl => keysyms::KEY_Control_R,
-            Key::Redo => keysyms::KEY_Redo,
-            Key::Return => keysyms::KEY_Return,
-            Key::RightArrow => keysyms::KEY_Right,
-            Key::RShift => keysyms::KEY_Shift_R,
-            Key::ScrollLock => keysyms::KEY_Scroll_Lock,
-            Key::Select => keysyms::KEY_Select,
-            Key::ScriptSwitch => keysyms::KEY_script_switch,
-            Key::Shift | Key::LShift => keysyms::KEY_Shift_L,
-            Key::ShiftLock => keysyms::KEY_Shift_Lock,
-            Key::Space => keysyms::KEY_space,
-            Key::SysReq => keysyms::KEY_Sys_Req,
-            Key::Tab => keysyms::KEY_Tab,
-            Key::Undo => keysyms::KEY_Undo,
-            Key::UpArrow => keysyms::KEY_Up,
-            Key::Command | Key::Super | Key::Windows | Key::Meta => keysyms::KEY_Super_L,
+            Key::Alt | Key::LAlt | Key::Option => Keysym::Alt_L,
+            Key::Backspace => Keysym::BackSpace,
+            Key::Begin => Keysym::Begin,
+            Key::Break => Keysym::Break,
+            Key::Cancel => Keysym::Cancel,
+            Key::CapsLock => Keysym::Caps_Lock,
+            Key::Clear => Keysym::Clear,
+            Key::Control | Key::LControl => Keysym::Control_L,
+            Key::Delete => Keysym::Delete,
+            Key::DownArrow => Keysym::Down,
+            Key::End => Keysym::End,
+            Key::Escape => Keysym::Escape,
+            Key::Execute => Keysym::Execute,
+            Key::F1 => Keysym::F1,
+            Key::F2 => Keysym::F2,
+            Key::F3 => Keysym::F3,
+            Key::F4 => Keysym::F4,
+            Key::F5 => Keysym::F5,
+            Key::F6 => Keysym::F6,
+            Key::F7 => Keysym::F7,
+            Key::F8 => Keysym::F8,
+            Key::F9 => Keysym::F9,
+            Key::F10 => Keysym::F10,
+            Key::F11 => Keysym::F11,
+            Key::F12 => Keysym::F12,
+            Key::F13 => Keysym::F13,
+            Key::F14 => Keysym::F14,
+            Key::F15 => Keysym::F15,
+            Key::F16 => Keysym::F16,
+            Key::F17 => Keysym::F17,
+            Key::F18 => Keysym::F18,
+            Key::F19 => Keysym::F19,
+            Key::F20 => Keysym::F20,
+            Key::F21 => Keysym::F21,
+            Key::F22 => Keysym::F22,
+            Key::F23 => Keysym::F23,
+            Key::F24 => Keysym::F24,
+            Key::F25 => Keysym::F25,
+            Key::F26 => Keysym::F26,
+            Key::F27 => Keysym::F27,
+            Key::F28 => Keysym::F28,
+            Key::F29 => Keysym::F29,
+            Key::F30 => Keysym::F30,
+            Key::F31 => Keysym::F31,
+            Key::F32 => Keysym::F32,
+            Key::F33 => Keysym::F33,
+            Key::F34 => Keysym::F34,
+            Key::F35 => Keysym::F35,
+            Key::Find => Keysym::Find,
+            Key::Hangul => Keysym::Hangul,
+            Key::Hanja => Keysym::Hangul_Hanja,
+            Key::Help => Keysym::Help,
+            Key::Home => Keysym::Home,
+            Key::Insert => Keysym::Insert,
+            Key::Kanji => Keysym::Kanji,
+            Key::LeftArrow => Keysym::Left,
+            Key::Linefeed => Keysym::Linefeed,
+            Key::LMenu => Keysym::Menu,
+            Key::ModeChange => Keysym::Mode_switch,
+            Key::Numlock => Keysym::Num_Lock,
+            Key::PageDown => Keysym::Page_Down,
+            Key::PageUp => Keysym::Page_Up,
+            Key::Pause => Keysym::Pause,
+            Key::Print => Keysym::Print,
+            Key::RAlt => Keysym::Alt_R,
+            Key::RControl => Keysym::Control_R,
+            Key::Redo => Keysym::Redo,
+            Key::Return => Keysym::Return,
+            Key::RightArrow => Keysym::Right,
+            Key::RShift => Keysym::Shift_R,
+            Key::ScrollLock => Keysym::Scroll_Lock,
+            Key::Select => Keysym::Select,
+            Key::ScriptSwitch => Keysym::script_switch,
+            Key::Shift | Key::LShift => Keysym::Shift_L,
+            Key::ShiftLock => Keysym::Shift_Lock,
+            Key::Space => Keysym::space,
+            Key::SysReq => Keysym::Sys_Req,
+            Key::Tab => Keysym::Tab,
+            Key::Undo => Keysym::Undo,
+            Key::UpArrow => Keysym::Up,
+            Key::Command | Key::Super | Key::Windows | Key::Meta => Keysym::Super_L,
         }
     }
 
@@ -261,7 +262,7 @@ impl Con {
     // Map the the given keycode to the NoSymbol keysym so it can get reused
     fn unmap_sym(&mut self, keysym: Keysym) {
         if let Some(&keycode) = self.keymap.get(&keysym) {
-            self.bind_key(keycode, KEY_NoSymbol);
+            self.bind_key(keycode, NO_SYMBOL);
             self.unused_keycodes.push_back(keycode);
             self.keymap.remove(&keysym);
             println!("keymap remove: {:?}", self.keymap);
@@ -290,7 +291,7 @@ impl Con {
         // toupper(keysym), tolower(keysym), toupper(keysym), 0, 0, 0, 0, ...
         // https://stackoverflow.com/a/44334103
         self.connection
-            .change_keyboard_mapping(1, keycode, 2, &[keysym, keysym])
+            .change_keyboard_mapping(1, keycode, 2, &[keysym.raw(), keysym.raw()])
             .unwrap();
         self.connection.sync().unwrap();
     }
@@ -485,7 +486,7 @@ impl Drop for Con {
             // Map the the given keycode
             // to the NoSymbol keysym so
             // it can get reused
-            self.bind_key(keycode, KEY_NoSymbol);
+            self.bind_key(keycode, NO_SYMBOL);
         }
         println!();
 

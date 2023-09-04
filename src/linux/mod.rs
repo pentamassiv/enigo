@@ -1,6 +1,10 @@
-use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
+use xkbcommon::xkb::Keysym;
+/// The "empty" keyboard symbol.
+// TODO: Replace it with the NO_SYMBOL from xkbcommon, once it is available
+// there
+pub const NO_SYMBOL: Keysym = Keysym::new(0);
 
-pub type Keysym = u32;
+use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 #[cfg_attr(feature = "x11rb", path = "x11rb.rs")]
 #[cfg_attr(not(feature = "x11rb"), path = "xdo.rs")]
@@ -25,7 +29,7 @@ pub enum ConnectionError {
 impl std::fmt::Display for ConnectionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConnectionError::MappingFailed(e) => write!(f, "Allocation failed: {e}"),
+            ConnectionError::MappingFailed(e) => write!(f, "Allocation failed: {e:?}"),
             ConnectionError::Connection(e) => write!(f, "Connection: {e}"),
             ConnectionError::Format(e) => write!(f, "Format: {e}"),
             ConnectionError::General(e) => write!(f, "General: {e}"),

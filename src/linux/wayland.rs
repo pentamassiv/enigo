@@ -1,8 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
-use std::fmt;
-use std::io::{Seek, SeekFrom, Write};
-use std::os::fd::AsFd as _;
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::os::fd::AsFd;
 use std::time::Instant;
 
 use tempfile::tempfile;
@@ -25,7 +24,7 @@ use wayland_protocols_wlr::virtual_pointer::v1::client::{
 
 use xkbcommon::xkb::{keysym_from_name, keysym_get_name, KEYSYM_NO_FLAGS};
 
-use super::{ConnectionError, Keysym};
+use super::{ConnectionError, Keysym, KEYMAP_BEGINNING, KEYMAP_END};
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 pub type Keycode = u32;
@@ -34,341 +33,32 @@ struct KeyMap {
     keymap: HashMap<Keysym, Keycode>, // UTF-8 -> (keysym, keycode, refcount)
     unused_keycodes: VecDeque<Keycode>, // Used to keep track of unused keycodes
     needs_regeneration: bool,
+    file: Option<std::fs::File>, // Memory mapped temporary file that contains the keymap
     modifiers: u32,
     held: Vec<Key>,
 }
 
-/// Generates a single-level keymap.
-///
-/// # Errors
-/// The only way this can throw an error is if the generated String is not
-/// valid UTF8
-impl fmt::Display for KeyMap {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "xkb_keymap {{
-        xkb_keycodes {{
-            minimum = 8;
-            maximum = 255;
-            
-            <I8> = 8;
-            <I9> = 9;
-            <I10> = 10;
-            <I11> = 11;
-            <I12> = 12;
-            <I13> = 13;
-            <I14> = 14;
-            <I15> = 15;
-            <I16> = 16;
-            <I17> = 17;
-            <I18> = 18;
-            <I19> = 19;
-            <I20> = 20;
-            <I21> = 21;
-            <I22> = 22;
-            <I23> = 23;
-            <I24> = 24;
-            <I25> = 25;
-            <I26> = 26;
-            <I27> = 27;
-            <I28> = 28;
-            <I29> = 29;
-            <I30> = 30;
-            <I31> = 31;
-            <I32> = 32;
-            <I33> = 33;
-            <I34> = 34;
-            <I35> = 35;
-            <I36> = 36;
-            <I37> = 37;
-            <I38> = 38;
-            <I39> = 39;
-            <I40> = 40;
-            <I41> = 41;
-            <I42> = 42;
-            <I43> = 43;
-            <I44> = 44;
-            <I45> = 45;
-            <I46> = 46;
-            <I47> = 47;
-            <I48> = 48;
-            <I49> = 49;
-            <I50> = 50;
-            <I51> = 51;
-            <I52> = 52;
-            <I53> = 53;
-            <I54> = 54;
-            <I55> = 55;
-            <I56> = 56;
-            <I57> = 57;
-            <I58> = 58;
-            <I59> = 59;
-            <I60> = 60;
-            <I61> = 61;
-            <I62> = 62;
-            <I63> = 63;
-            <I64> = 64;
-            <I65> = 65;
-            <I66> = 66;
-            <I67> = 67;
-            <I68> = 68;
-            <I69> = 69;
-            <I70> = 70;
-            <I71> = 71;
-            <I72> = 72;
-            <I73> = 73;
-            <I74> = 74;
-            <I75> = 75;
-            <I76> = 76;
-            <I77> = 77;
-            <I78> = 78;
-            <I79> = 79;
-            <I80> = 80;
-            <I81> = 81;
-            <I82> = 82;
-            <I83> = 83;
-            <I84> = 84;
-            <I85> = 85;
-            <I86> = 86;
-            <I87> = 87;
-            <I88> = 88;
-            <I89> = 89;
-            <I90> = 90;
-            <I91> = 91;
-            <I92> = 92;
-            <I93> = 93;
-            <I94> = 94;
-            <I95> = 95;
-            <I96> = 96;
-            <I97> = 97;
-            <I98> = 98;
-            <I99> = 99;
-            <I100> = 100;
-            <I101> = 101;
-            <I102> = 102;
-            <I103> = 103;
-            <I104> = 104;
-            <I105> = 105;
-            <I106> = 106;
-            <I107> = 107;
-            <I108> = 108;
-            <I109> = 109;
-            <I110> = 110;
-            <I111> = 111;
-            <I112> = 112;
-            <I113> = 113;
-            <I114> = 114;
-            <I115> = 115;
-            <I116> = 116;
-            <I117> = 117;
-            <I118> = 118;
-            <I119> = 119;
-            <I120> = 120;
-            <I121> = 121;
-            <I122> = 122;
-            <I123> = 123;
-            <I124> = 124;
-            <I125> = 125;
-            <I126> = 126;
-            <I127> = 127;
-            <I128> = 128;
-            <I129> = 129;
-            <I130> = 130;
-            <I131> = 131;
-            <I132> = 132;
-            <I133> = 133;
-            <I134> = 134;
-            <I135> = 135;
-            <I136> = 136;
-            <I137> = 137;
-            <I138> = 138;
-            <I139> = 139;
-            <I140> = 140;
-            <I141> = 141;
-            <I142> = 142;
-            <I143> = 143;
-            <I144> = 144;
-            <I145> = 145;
-            <I146> = 146;
-            <I147> = 147;
-            <I148> = 148;
-            <I149> = 149;
-            <I150> = 150;
-            <I151> = 151;
-            <I152> = 152;
-            <I153> = 153;
-            <I154> = 154;
-            <I155> = 155;
-            <I156> = 156;
-            <I157> = 157;
-            <I158> = 158;
-            <I159> = 159;
-            <I160> = 160;
-            <I161> = 161;
-            <I162> = 162;
-            <I163> = 163;
-            <I164> = 164;
-            <I165> = 165;
-            <I166> = 166;
-            <I167> = 167;
-            <I168> = 168;
-            <I169> = 169;
-            <I170> = 170;
-            <I171> = 171;
-            <I172> = 172;
-            <I173> = 173;
-            <I174> = 174;
-            <I175> = 175;
-            <I176> = 176;
-            <I177> = 177;
-            <I178> = 178;
-            <I179> = 179;
-            <I180> = 180;
-            <I181> = 181;
-            <I182> = 182;
-            <I183> = 183;
-            <I184> = 184;
-            <I185> = 185;
-            <I186> = 186;
-            <I187> = 187;
-            <I188> = 188;
-            <I189> = 189;
-            <I190> = 190;
-            <I191> = 191;
-            <I192> = 192;
-            <I193> = 193;
-            <I194> = 194;
-            <I195> = 195;
-            <I196> = 196;
-            <I197> = 197;
-            <I198> = 198;
-            <I199> = 199;
-            <I200> = 200;
-            <I201> = 201;
-            <I202> = 202;
-            <I203> = 203;
-            <I204> = 204;
-            <I205> = 205;
-            <I206> = 206;
-            <I207> = 207;
-            <I208> = 208;
-            <I209> = 209;
-            <I210> = 210;
-            <I211> = 211;
-            <I212> = 212;
-            <I213> = 213;
-            <I214> = 214;
-            <I215> = 215;
-            <I216> = 216;
-            <I217> = 217;
-            <I218> = 218;
-            <I219> = 219;
-            <I220> = 220;
-            <I221> = 221;
-            <I222> = 222;
-            <I223> = 223;
-            <I224> = 224;
-            <I225> = 225;
-            <I226> = 226;
-            <I227> = 227;
-            <I228> = 228;
-            <I229> = 229;
-            <I230> = 230;
-            <I231> = 231;
-            <I232> = 232;
-            <I233> = 233;
-            <I234> = 234;
-            <I235> = 235;
-            <I236> = 236;
-            <I237> = 237;
-            <I238> = 238;
-            <I239> = 239;
-            <I240> = 240;
-            <I241> = 241;
-            <I242> = 242;
-            <I243> = 243;
-            <I244> = 244;
-            <I245> = 245;
-            <I246> = 246;
-            <I247> = 247;
-            <I248> = 248;
-            <I249> = 249;
-            <I250> = 250;
-            <I251> = 251;
-            <I252> = 252;
-            <I253> = 253;
-            <I254> = 254;
-            <I255> = 255;
-            
-            indicator 1 = \"Caps Lock\"; // Needed for Xwayland
-        }};
-        xkb_types {{
-            // Do NOT change this part. It is required by Xorg/Xwayland.
-            virtual_modifiers OSK;
-            type \"ONE_LEVEL\" {{
-                modifiers= none;
-                level_name[Level1]= \"Any\";
-            }};
-            type \"TWO_LEVEL\" {{
-                level_name[Level1]= \"Base\";
-            }};
-            type \"ALPHABETIC\" {{
-                level_name[Level1]= \"Base\";
-            }};
-            type \"KEYPAD\" {{
-                level_name[Level1]= \"Base\";
-            }};
-            type \"SHIFT+ALT\" {{
-                level_name[Level1]= \"Base\";
-            }};
-        }};
-        xkb_compatibility {{
-            // Do NOT change this part. It is required by Xorg/Xwayland.
-            interpret Any+AnyOf(all) {{
-                action= SetMods(modifiers=modMapMods,clearLocks);
-            }};
-        }};
-        xkb_symbols {{"
-        )?;
-        for (&keysym, &keycode) in &self.keymap {
-            write!(
-                f,
-                "
-            key <I{}> {{ [ {} ] }}; // \\n",
-                keycode,
-                keysym_get_name(keysym)
-            )?;
-        }
-        writeln!(
-            f,
-            "
-        }};
-        
-    }};"
-        )
-    }
-}
-
 impl KeyMap {
-    /// Create a new KeyMap
-    pub fn new() -> Result<Self, ConnectionError> {
+    /// Create a new `KeyMap`
+    pub fn new() -> Self {
         // Only keycodes from 8 to 255 can be used
         let keymap = HashMap::with_capacity(255 - 7);
         let mut unused_keycodes = VecDeque::with_capacity(255 - 7); // All keycodes are unused when initialized
         for n in 8..=255 {
             unused_keycodes.push_back(n);
         }
+        let file = None;
         let needs_regeneration = true;
         let modifiers = 0;
         let held = Vec::with_capacity(255 - 7);
-        Ok(Self {
+        Self {
             keymap,
             unused_keycodes,
-            held,
             needs_regeneration,
+            file,
             modifiers,
-        })
+            held,
+        }
     }
 
     fn get_keycode(&mut self, keysym: Keysym) -> Result<Keycode, ConnectionError> {
@@ -377,8 +67,8 @@ impl KeyMap {
             Ok(*keycode)
         } else {
             // The keysym needs to get mapped to an unused keycode
-            self.map_sym(keysym) // Always map the keycode if it has not yet
-                                 // been mapped, so it is layer agnostic
+            self.map(keysym) // Always map the keycode if it has not yet
+                             // been mapped, so it is layer agnostic
         }
     }
 
@@ -482,7 +172,7 @@ impl KeyMap {
         }
     }
 
-    fn map_sym(&mut self, keysym: Keysym) -> Result<Keycode, ConnectionError> {
+    fn map(&mut self, keysym: Keysym) -> Result<Keycode, ConnectionError> {
         match self.unused_keycodes.pop_front() {
             // A keycode is unused so a mapping is possible
             Some(unused_keycode) => {
@@ -496,7 +186,7 @@ impl KeyMap {
     }
 
     // Map the the given keycode to the NoSymbol keysym so it can get reused
-    fn unmap_sym(&mut self, keysym: Keysym) {
+    fn unmap(&mut self, keysym: Keysym) {
         if let Some(&keycode) = self.keymap.get(&keysym) {
             self.needs_regeneration = true;
             self.unused_keycodes.push_back(keycode);
@@ -514,21 +204,71 @@ impl KeyMap {
         if self.unused_keycodes.is_empty() {
             let mapped_keys = self.keymap.clone();
             for &sym in mapped_keys.keys() {
-                self.unmap_sym(sym);
+                self.unmap(sym);
             }
             return true;
         }
         false
     }
 
-    /// Check if a new keymap is available
-    /// Return it if it is
-    pub fn new_keymap(&mut self) -> Option<String> {
-        if self.needs_regeneration {
-            self.needs_regeneration = false;
-            return Some(self.to_string());
+    /// Regenerate the keymap if there were any changes
+    /// and write the new keymap to a memory mapped file
+    ///
+    /// If there was the need to regenerate the keymap, a file descriptor and
+    /// the size of the keymap are returned
+    pub fn regenerate(&mut self) -> Option<u32> {
+        // Don't do anything if there were no changes
+        if !self.needs_regeneration {
+            return None;
         }
-        None
+
+        // Create a file to store the layout
+        if self.file.is_none() {
+            let mut temp_file = tempfile().expect("Unable to create tempfile");
+            temp_file.write_all(KEYMAP_BEGINNING).unwrap();
+            self.file = Some(temp_file);
+        }
+
+        let keymap_file = self
+            .file
+            .as_mut()
+            .expect("There was no file to write to. This should not be possible!");
+        // Move the virtual cursor of the file to the end of the part of the keymap that
+        // is always the same so we only overwrite the parts that can change.
+        keymap_file
+            .seek(SeekFrom::Start(KEYMAP_BEGINNING.len() as u64))
+            .unwrap();
+        for (&keysym, &keycode) in &self.keymap {
+            write!(
+                keymap_file,
+                "
+            key <I{}> {{ [ {} ] }}; // \\n",
+                keycode,
+                keysym_get_name(keysym)
+            )
+            .unwrap();
+        }
+        keymap_file.write_all(KEYMAP_END).unwrap();
+        // Truncate the file at the current cursor position in order to cut off any old
+        // data in case the keymap was smaller than the old one
+        let keymap_len = keymap_file
+            .stream_position()
+            .expect("Unable to find the position of the cursor in the file");
+        keymap_file
+            .set_len(keymap_len)
+            .expect("Unable to trim the file");
+        self.needs_regeneration = false;
+
+        // DEBUG OUTPUT
+        // TODO: Delete this once it is confirmed the keymap file is correct
+        let mut contents = String::new();
+        keymap_file
+            .read_to_string(&mut contents)
+            .expect("Unable to read the file");
+        println!("Content of the keymap file:");
+        println!("{contents}");
+
+        Some(keymap_len.try_into().unwrap())
     }
 
     fn press_modifier(&mut self, pressed_modifier: u32) -> u32 {
@@ -560,8 +300,8 @@ pub struct Con {
     state: WaylandState,
     virtual_keyboard: Option<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1>,
     input_method: Option<zwp_input_method_v2::ZwpInputMethodV2>,
-    serial: u32,
     virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
+    serial: u32,
     base_time: std::time::Instant,
 }
 
@@ -611,33 +351,29 @@ impl Con {
 
         // Setup virtual keyboard
         let virtual_keyboard = if let Some(seat) = state.seat.as_ref() {
-            if let Some(vk_mgr) = state.keyboard_manager.as_ref() {
-                Some(vk_mgr.create_virtual_keyboard(seat, &qh, ()))
-            } else {
-                None
-            }
+            state
+                .keyboard_manager
+                .as_ref()
+                .map(|vk_mgr| vk_mgr.create_virtual_keyboard(seat, &qh, ()))
         } else {
             None
         };
 
         // Setup input method
         let input_method = if let Some(seat) = state.seat.as_ref() {
-            if let Some(im_mgr) = state.im_manager.as_ref() {
-                Some(im_mgr.get_input_method(seat, &qh, ()))
-            } else {
-                None
-            }
+            state
+                .im_manager
+                .as_ref()
+                .map(|im_mgr| im_mgr.get_input_method(seat, &qh, ()))
         } else {
             None
         };
-        let serial = 0;
 
         // Setup virtual pointer
-        let virtual_pointer = if let Some(vp_mgr) = state.pointer_manager.as_ref() {
-            Some(vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ()))
-        } else {
-            None
-        };
+        let virtual_pointer = state
+            .pointer_manager
+            .as_ref()
+            .map(|vp_mgr| vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ()));
 
         // Try to authenticate for the KDE Fake Input protocol
         if let Some(kde_input) = &state.kde_input {
@@ -646,19 +382,20 @@ impl Con {
             kde_input.authenticate(application, reason);
         }
 
+        let serial = 0;
         let base_time = Instant::now();
 
-        let keymap = KeyMap::new().expect("Could not create the key map");
+        let keymap = KeyMap::new();
 
         Ok(Self {
             keymap,
             event_queue,
             state,
-            base_time,
             virtual_keyboard,
             input_method,
-            serial,
             virtual_pointer,
+            serial,
+            base_time,
         })
     }
 
@@ -676,29 +413,12 @@ impl Con {
     ///
     /// # Errors
     /// TODO
-    fn apply_layout(&mut self, layout: &str) {
+    fn apply_layout(&mut self) {
         if let Some(vk) = &self.virtual_keyboard {
-            // We need to build a file with a fd in order to pass the layout file to Wayland
-            // for processing
-            let keymap_size = layout.len();
-            let keymap_size_u32: u32 = keymap_size.try_into().unwrap(); // Convert it from usize to u32, panics if it is not possible
-            let keymap_size_u64: u64 = keymap_size.try_into().unwrap(); // Convert it from usize to u64, panics if it is not possible
-            let mut keymap_file = tempfile().expect("Unable to create tempfile");
-
-            // Allocate space in the file first
-            keymap_file.seek(SeekFrom::Start(keymap_size_u64)).unwrap();
-            keymap_file.write_all(&[0]).unwrap();
-            keymap_file.rewind().unwrap();
-            let mut data = unsafe {
-                memmap2::MmapOptions::new()
-                    .map_mut(&keymap_file)
-                    .expect("Could not access data from memory mapped file")
-            };
-            data[..layout.len()].copy_from_slice(layout.as_bytes());
-
-            // Get fd to pass to Wayland
-            let keymap_raw_fd = keymap_file.as_fd();
-            vk.keymap(1, keymap_raw_fd, keymap_size_u32);
+            // Only send an updated keymap if we had to regenerate it
+            if let Some(keymap_size) = self.keymap.regenerate() {
+                vk.keymap(1, self.keymap.file.as_ref().unwrap().as_fd(), keymap_size);
+            }
         }
     }
 
@@ -740,16 +460,13 @@ impl Con {
             kc.try_into().unwrap()
         } else {
             let sym = KeyMap::key_to_keysym(key);
-            let keycode = self.keymap.get_keycode(sym).unwrap();
-            keycode
+            self.keymap.get_keycode(sym).unwrap()
         };
 
         // Apply the new keymap if there were any changes
-        if let Some(keymap_string) = self.keymap.new_keymap() {
-            self.apply_layout(&keymap_string);
-        }
+        self.apply_layout();
 
-        let modifier = self.is_modifier(key);
+        let modifier = Self::is_modifier(key);
 
         match press {
             None => {
@@ -784,7 +501,7 @@ impl Con {
         }
     }
 
-    fn is_modifier(&self, key: Key) -> Option<u32> {
+    fn is_modifier(key: Key) -> Option<u32> {
         match key {
             Key::Shift | Key::LShift | Key::RShift => Some(Modifier::Shift as u32),
             Key::CapsLock => Some(Modifier::Lock as u32),
@@ -800,7 +517,7 @@ impl Con {
 
     fn send_modifier_event(&mut self, modifiers: u32) {
         if let Some(vk) = &self.virtual_keyboard {
-            vk.modifiers(modifiers, 0, 0, 0)
+            vk.modifiers(modifiers, 0, 0, 0);
         }
     }
 }
@@ -1233,10 +950,10 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
 impl Drop for WaylandState {
     fn drop(&mut self) {
         if let Some(im_mgr) = self.im_manager.as_ref() {
-            im_mgr.destroy()
+            im_mgr.destroy();
         }
         if let Some(pointer_mgr) = self.pointer_manager.as_ref() {
-            pointer_mgr.destroy()
+            pointer_mgr.destroy();
         }
     }
 }

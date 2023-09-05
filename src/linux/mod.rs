@@ -13,6 +13,11 @@ mod x11;
 #[cfg(feature = "wayland")]
 pub mod wayland;
 
+#[cfg(feature = "wayland")]
+pub mod keymap;
+#[cfg(feature = "wayland")]
+use keymap::{KEYMAP_BEGINNING, KEYMAP_END};
+
 #[derive(Debug)]
 pub enum ConnectionError {
     MappingFailed(Keysym),

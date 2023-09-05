@@ -31,7 +31,6 @@ wayland = [
     "wayland-protocols-misc",
     "wayland-protocols-wlr",
     "wayland-protocols-plasma",
-    "memmap2",
     "tempfile",
 ]
 
@@ -64,7 +63,6 @@ x11rb = { version = "0.12", features = [
     "xtest",
 ], optional = true }
 xkbcommon = "0.6"
-memmap2 = { version = "0.5", optional = true }
 tempfile = { version = "3.5", optional = true }
 
 [build-dependencies]

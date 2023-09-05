@@ -212,10 +212,10 @@ impl KeyMap {
     }
 
     /// Regenerate the keymap if there were any changes
-    /// and write the new keymap to a memory mapped file
+    /// and write the new keymap to a temporary file
     ///
-    /// If there was the need to regenerate the keymap, a file descriptor and
-    /// the size of the keymap are returned
+    /// If there was the need to regenerate the keymap, the size of the keymap
+    /// is returned
     pub fn regenerate(&mut self) -> Option<u32> {
         // Don't do anything if there were no changes
         if !self.needs_regeneration {

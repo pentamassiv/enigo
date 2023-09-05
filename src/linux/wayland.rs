@@ -259,15 +259,6 @@ impl KeyMap {
             .expect("Unable to trim the file");
         self.needs_regeneration = false;
 
-        // DEBUG OUTPUT
-        // TODO: Delete this once it is confirmed the keymap file is correct
-        let mut contents = String::new();
-        keymap_file
-            .read_to_string(&mut contents)
-            .expect("Unable to read the file");
-        println!("Content of the keymap file:");
-        println!("{contents}");
-
         Some(keymap_len.try_into().unwrap())
     }
 

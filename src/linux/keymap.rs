@@ -1,5 +1,5 @@
-pub const KEYMAP_BEGINNING: &[u8; 7339] = b"xkb_keymap {{
-        xkb_keycodes {{
+pub const KEYMAP_BEGINNING: &[u8; 7319] = b"xkb_keymap {
+        xkb_keycodes {
             minimum = 8;
             maximum = 255;
             
@@ -253,36 +253,36 @@ pub const KEYMAP_BEGINNING: &[u8; 7339] = b"xkb_keymap {{
             <I255> = 255;
             
             indicator 1 = \"Caps Lock\"; // Needed for Xwayland
-        }};
-        xkb_types {{
+        };
+        xkb_types {
             // Do NOT change this part. It is required by Xorg/Xwayland.
             virtual_modifiers OSK;
-            type \"ONE_LEVEL\" {{
+            type \"ONE_LEVEL\" {
                 modifiers= none;
                 level_name[Level1]= \"Any\";
-            }};
-            type \"TWO_LEVEL\" {{
+            };
+            type \"TWO_LEVEL\" {
                 level_name[Level1]= \"Base\";
-            }};
-            type \"ALPHABETIC\" {{
+            };
+            type \"ALPHABETIC\" {
                 level_name[Level1]= \"Base\";
-            }};
-            type \"KEYPAD\" {{
+            };
+            type \"KEYPAD\" {
                 level_name[Level1]= \"Base\";
-            }};
-            type \"SHIFT+ALT\" {{
+            };
+            type \"SHIFT+ALT\" {
                 level_name[Level1]= \"Base\";
-            }};
-        }};
-        xkb_compatibility {{
+            };
+        };
+        xkb_compatibility {
             // Do NOT change this part. It is required by Xorg/Xwayland.
-            interpret Any+AnyOf(all) {{
+            interpret Any+AnyOf(all) {
                 action= SetMods(modifiers=modMapMods,clearLocks);
-            }};
-        }};
-        xkb_symbols {{";
+            };
+        };
+        xkb_symbols {";
 
-pub const KEYMAP_END: &[u8; 29] = b"
-        }};
+pub const KEYMAP_END: &[u8; 27] = b"
+        };
         
-    }};";
+    };";

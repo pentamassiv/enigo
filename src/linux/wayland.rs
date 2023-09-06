@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::AsFd;
 use std::time::Instant;
 
@@ -11,11 +11,9 @@ use wayland_client::{
     protocol::{wl_pointer, wl_registry, wl_seat},
     Connection, Dispatch, EventQueue, QueueHandle,
 };
-use wayland_protocols_misc::zwp_input_method_v2::client::{
-    zwp_input_method_manager_v2, zwp_input_method_v2,
-};
-use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
-    zwp_virtual_keyboard_manager_v1, zwp_virtual_keyboard_v1,
+use wayland_protocols_misc::{
+    zwp_input_method_v2::client::{zwp_input_method_manager_v2, zwp_input_method_v2},
+    zwp_virtual_keyboard_v1::client::{zwp_virtual_keyboard_manager_v1, zwp_virtual_keyboard_v1},
 };
 use wayland_protocols_plasma::fake_input::client::org_kde_kwin_fake_input;
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
@@ -25,16 +23,16 @@ use wayland_protocols_wlr::virtual_pointer::v1::client::{
 use xkbcommon::xkb::{keysym_from_name, keysym_get_name, KEYSYM_NO_FLAGS};
 
 use super::{ConnectionError, Keysym, KEYMAP_BEGINNING, KEYMAP_END};
-use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
+use crate::{Direction, Key, KeyboardControllable, MouseButton, MouseControllable};
 
 pub type Keycode = u32;
 
 struct KeyMap {
-    keymap: HashMap<Keysym, Keycode>, // UTF-8 -> (keysym, keycode, refcount)
-    unused_keycodes: VecDeque<Keycode>, // Used to keep track of unused keycodes
+    keymap: HashMap<Keysym, Keycode>,
+    unused_keycodes: VecDeque<Keycode>,
     needs_regeneration: bool,
-    file: Option<std::fs::File>, // Memory mapped temporary file that contains the keymap
-    modifiers: u32,
+    file: Option<std::fs::File>, // Temporary file that contains the keymap
+    modifiers: u32,              // State of the modifiers
     held: Vec<Key>,
 }
 
@@ -195,8 +193,9 @@ impl KeyMap {
     }
 
     /// Check if there are still unused keycodes available. If there aren't,
-    /// make some room by freeing the mapped keycodes Returns true, if keys
-    /// were unmapped and the keymap needs to be regenerated
+    /// make some room by freeing the already mapped keycodes.
+    /// Returns true, if keys were unmapped and the keymap needs to be
+    /// regenerated
     fn make_room(&mut self) -> bool {
         // Unmap all keys, if all keycodes are already being used
         // TODO: Don't unmap the keycodes if they will be needed next
@@ -216,7 +215,7 @@ impl KeyMap {
     ///
     /// If there was the need to regenerate the keymap, the size of the keymap
     /// is returned
-    pub fn regenerate(&mut self) -> Option<u32> {
+    fn regenerate(&mut self) -> Option<u32> {
         // Don't do anything if there were no changes
         if !self.needs_regeneration {
             return None;
@@ -332,7 +331,7 @@ impl Con {
         let display = connection.display();
         display.get_registry(&qh, ());
 
-        // Setup VKState and dispatch events
+        // Setup WaylandState and dispatch events
         let mut state = WaylandState::new();
         if event_queue.roundtrip(&mut state).is_err() {
             return Err(ConnectionError::General(
@@ -367,6 +366,7 @@ impl Con {
             .map(|vp_mgr| vp_mgr.create_virtual_pointer(state.seat.as_ref(), &qh, ()));
 
         // Try to authenticate for the KDE Fake Input protocol
+        // TODO: Get this protocol to work
         if let Some(kde_input) = &state.kde_input {
             let application = "enigo".to_string();
             let reason = "enter keycodes or move the mouse".to_string();
@@ -390,7 +390,7 @@ impl Con {
         })
     }
 
-    /// Used to apply ms timestamps for Wayland key events
+    /// Get the duration since the Keymap was created
     fn get_time(&self) -> u32 {
         let duration = self.base_time.elapsed();
         let time = duration.as_millis();
@@ -413,23 +413,19 @@ impl Con {
         }
     }
 
-    /// Press/Release a specific UTF-8 symbol
-    /// NOTE: This function does not synchronize the event queue, should be done
-    /// immediately after calling (unless you're trying to optimize
-    /// scheduling).
+    /// Press/Release a keycode
+    /// NOTE: This function does not synchronize the event queue
     ///
     /// # Errors
     /// TODO
     fn send_key_event(&mut self, keycode: Keycode, press: bool) {
         if let Some(vk) = &self.virtual_keyboard {
             let time = self.get_time();
-            let state = u32::from(press);
             let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
-
-            // debug!("time:{} keycode:{}:{} state:{}", time, c, keycode, state);
+            let press = u32::from(press);
 
             // Send key event message
-            vk.key(time, keycode, state);
+            vk.key(time, keycode, press);
         }
     }
 
@@ -437,7 +433,7 @@ impl Con {
     // If press is None, it is assumed that the key is pressed and released
     // If press is true, the key is pressed
     // Otherwise the key is released
-    fn press_key(&mut self, key: Key, press: Option<bool>) {
+    fn press_key(&mut self, key: Key, press: Direction) {
         // Nothing to do
         if key == Key::Layout('\0') {
             return;
@@ -460,7 +456,7 @@ impl Con {
         let modifier = Self::is_modifier(key);
 
         match press {
-            None => {
+            Direction::Click => {
                 if let Some(m) = modifier {
                     let modifiers = self.keymap.press_modifier(m);
                     self.send_modifier_event(modifiers);
@@ -471,7 +467,7 @@ impl Con {
                     self.send_key_event(keycode, false);
                 }
             }
-            Some(true) => {
+            Direction::Press => {
                 if let Some(m) = modifier {
                     let modifiers = self.keymap.press_modifier(m);
                     self.send_modifier_event(modifiers);
@@ -480,7 +476,7 @@ impl Con {
                 }
                 self.keymap.pressed(key);
             }
-            Some(false) => {
+            Direction::Release => {
                 if let Some(m) = modifier {
                     let modifiers = self.keymap.release_modifier(m);
                     self.send_modifier_event(modifiers);
@@ -528,7 +524,7 @@ impl Drop for Con {
     // Release the held keys before the connection is dropped
     fn drop(&mut self) {
         for &k in &self.keymap.held() {
-            self.press_key(k, Some(false));
+            self.press_key(k, Direction::Release);
         }
 
         if let Some(vk) = &self.virtual_keyboard {
@@ -555,25 +551,26 @@ impl KeyboardControllable for Con {
         // otherwise fall back to using the virtual_keyboard method
         else {
             for c in string.chars() {
-                self.press_key(Key::Layout(c), None);
+                self.press_key(Key::Layout(c), Direction::Click);
             }
         }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_down(&mut self, key: crate::Key) {
-        self.press_key(key, Some(true));
+        self.press_key(key, Direction::Press);
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_up(&mut self, key: crate::Key) {
-        self.press_key(key, Some(false));
+        self.press_key(key, Direction::Release);
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_click(&mut self, key: crate::Key) {
-        self.press_key(key, Some(true));
-        self.press_key(key, Some(false));
+        // TODO: Use Direction::Click here
+        self.press_key(key, Direction::Press);
+        self.press_key(key, Direction::Release);
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 }

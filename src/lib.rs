@@ -356,3 +356,9 @@ impl fmt::Debug for Enigo {
         write!(f, "Enigo")
     }
 }
+
+enum Direction {
+    Press,
+    Release,
+    Click,
+}

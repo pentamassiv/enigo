@@ -605,7 +605,8 @@ impl MouseControllable for Con {
             vp.frame(); // TODO: Check if this is needed
         }
 
-        self.event_queue.roundtrip(&mut self.state).unwrap();
+        self.event_queue.roundtrip(&mut self.state).unwrap(); // TODO: Change to
+                                                              // flush()
     }
     fn mouse_move_relative(&mut self, x: i32, y: i32) {
         if let Some(vp) = &self.virtual_pointer {
@@ -613,7 +614,8 @@ impl MouseControllable for Con {
             vp.motion(time, x as f64, y as f64);
             vp.frame(); // TODO: Check if this is needed
         }
-        self.event_queue.roundtrip(&mut self.state).unwrap();
+        self.event_queue.roundtrip(&mut self.state).unwrap(); // TODO: Change to
+                                                              // flush()
     }
     fn mouse_down(&mut self, button: MouseButton) {
         if let Some(vp) = &self.virtual_pointer {
@@ -634,7 +636,8 @@ impl MouseControllable for Con {
             vp.button(time, button, wl_pointer::ButtonState::Pressed);
             vp.frame(); // TODO: Check if this is needed
         }
-        self.event_queue.roundtrip(&mut self.state).unwrap();
+        self.event_queue.roundtrip(&mut self.state).unwrap(); // TODO: Change to
+                                                              // flush()
     }
     fn mouse_up(&mut self, button: MouseButton) {
         if let Some(vp) = &self.virtual_pointer {
@@ -655,7 +658,8 @@ impl MouseControllable for Con {
             vp.button(time, button, wl_pointer::ButtonState::Released);
             vp.frame(); // TODO: Check if this is needed
         }
-        self.event_queue.roundtrip(&mut self.state).unwrap();
+        self.event_queue.roundtrip(&mut self.state).unwrap(); // TODO: Change to
+                                                              // flush()
     }
     fn mouse_click(&mut self, button: MouseButton) {
         if let Some(vp) = &self.virtual_pointer {
@@ -677,7 +681,8 @@ impl MouseControllable for Con {
             vp.button(time + 50, button, wl_pointer::ButtonState::Released);
             vp.frame(); // TODO: Check if this is needed
         }
-        self.event_queue.roundtrip(&mut self.state).unwrap();
+        self.event_queue.roundtrip(&mut self.state).unwrap(); // TODO: Change to
+                                                              // flush()
     }
     fn mouse_scroll_x(&mut self, length: i32) {
         if let Some(vp) = &self.virtual_pointer {
@@ -687,7 +692,8 @@ impl MouseControllable for Con {
             vp.axis(time, wl_pointer::Axis::HorizontalScroll, length.into());
             vp.frame(); // TODO: Check if this is needed
         }
-        self.event_queue.roundtrip(&mut self.state).unwrap();
+        self.event_queue.roundtrip(&mut self.state).unwrap(); // TODO: Change to
+                                                              // flush()
     }
     fn mouse_scroll_y(&mut self, length: i32) {
         if let Some(vp) = &self.virtual_pointer {
@@ -697,7 +703,8 @@ impl MouseControllable for Con {
             vp.axis(time, wl_pointer::Axis::VerticalScroll, length.into());
             vp.frame(); // TODO: Check if this is needed
         }
-        self.event_queue.roundtrip(&mut self.state).unwrap();
+        self.event_queue.roundtrip(&mut self.state).unwrap(); // TODO: Change to
+                                                              // flush()
     }
     fn main_display_size(&self) -> (i32, i32) {
         //(self.state.width, self.state.height)

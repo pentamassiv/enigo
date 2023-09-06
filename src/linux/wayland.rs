@@ -336,9 +336,8 @@ pub struct Con {
     event_queue: EventQueue<WaylandState>,
     state: WaylandState,
     virtual_keyboard: Option<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1>,
-    input_method: Option<zwp_input_method_v2::ZwpInputMethodV2>,
+    input_method: Option<(zwp_input_method_v2::ZwpInputMethodV2, u32)>,
     virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
-    serial: u32,
     base_time: std::time::Instant,
 }
 
@@ -401,7 +400,7 @@ impl Con {
             state
                 .im_manager
                 .as_ref()
-                .map(|im_mgr| im_mgr.get_input_method(seat, &qh, ()))
+                .map(|im_mgr| (im_mgr.get_input_method(seat, &qh, ()), 0))
         } else {
             None
         };
@@ -420,7 +419,6 @@ impl Con {
             kde_input.authenticate(application, reason);
         }
 
-        let serial = 0;
         let base_time = Instant::now();
 
         let keymap = KeyMap::new();
@@ -432,7 +430,6 @@ impl Con {
             virtual_keyboard,
             input_method,
             virtual_pointer,
-            serial,
             base_time,
         })
     }
@@ -552,7 +549,7 @@ impl Drop for Con {
         if let Some(vk) = &self.virtual_keyboard {
             vk.destroy();
         }
-        if let Some(im) = &self.input_method {
+        if let Some((im, _)) = &self.input_method {
             im.destroy();
         }
         if let Some(vp) = &self.virtual_pointer {
@@ -566,10 +563,10 @@ impl KeyboardControllable for Con {
     fn key_sequence(&mut self, string: &str) {
         // Use the much faster and less error prone input_method protocol if it is
         // available
-        if let Some(im) = &self.input_method {
+        if let Some((im, serial)) = &mut self.input_method {
             im.commit_string(string.to_string());
-            im.commit(self.serial);
-            self.serial = self.serial.wrapping_add(1);
+            im.commit(*serial);
+            *serial = serial.wrapping_add(1);
         }
         // otherwise fall back to using the virtual_keyboard method
         else {

@@ -524,6 +524,7 @@ impl Con {
     fn send_modifier_event(&mut self, modifiers: ModifierBitflag) {
         if let Some(vk) = &self.virtual_keyboard {
             vk.modifiers(modifiers, 0, 0, 0);
+            self.event_queue.flush().unwrap();
         }
     }
 }
@@ -567,6 +568,7 @@ impl KeyboardControllable for Con {
             im.commit_string(string.to_string());
             im.commit(*serial);
             *serial = serial.wrapping_add(1);
+            self.event_queue.flush().unwrap();
         }
         // otherwise fall back to using the virtual_keyboard method
         else {
@@ -574,22 +576,18 @@ impl KeyboardControllable for Con {
                 self.enter_key(Key::Layout(c), Direction::Click);
             }
         }
-        self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_down(&mut self, key: crate::Key) {
         self.enter_key(key, Direction::Press);
-        self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_up(&mut self, key: crate::Key) {
         self.enter_key(key, Direction::Release);
-        self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_click(&mut self, key: crate::Key) {
         self.enter_key(key, Direction::Click);
-        self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 }
 

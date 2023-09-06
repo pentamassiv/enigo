@@ -357,6 +357,7 @@ impl fmt::Debug for Enigo {
     }
 }
 
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum Direction {
     Press,
     Release,

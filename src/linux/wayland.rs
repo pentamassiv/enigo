@@ -26,13 +26,14 @@ use super::{ConnectionError, Keysym, KEYMAP_BEGINNING, KEYMAP_END};
 use crate::{Direction, Key, KeyboardControllable, MouseButton, MouseControllable};
 
 pub type Keycode = u32;
+pub type ModifierBitflag = u32; // TODO: Maybe create a proper type for this
 
 struct KeyMap {
     keymap: HashMap<Keysym, Keycode>,
     unused_keycodes: VecDeque<Keycode>,
     needs_regeneration: bool,
     file: Option<std::fs::File>, // Temporary file that contains the keymap
-    modifiers: u32,              // State of the modifiers
+    modifiers: ModifierBitflag,  // State of the modifiers
     held: Vec<Key>,
 }
 
@@ -59,6 +60,7 @@ impl KeyMap {
         }
     }
 
+    /// Get the keycode for the provided Keysym
     fn get_keycode(&mut self, keysym: Keysym) -> Result<Keycode, ConnectionError> {
         if let Some(keycode) = self.keymap.get(&keysym) {
             // The keysym is already mapped and cached in the keymap
@@ -70,6 +72,7 @@ impl KeyMap {
         }
     }
 
+    /// Converts a Key to a Keysym
     fn key_to_keysym(key: Key) -> Keysym {
         match key {
             Key::Layout(c) => match c {
@@ -170,6 +173,33 @@ impl KeyMap {
         }
     }
 
+    /// Check if the key is a modifier
+    ///
+    /// If it is a modifier, return it's bitfield.
+    /// Otherwise return a None
+    fn is_modifier(key: Key) -> Option<ModifierBitflag> {
+        match key {
+            Key::Shift | Key::LShift | Key::RShift => Some(Modifier::Shift as ModifierBitflag),
+            Key::CapsLock => Some(Modifier::Lock as ModifierBitflag),
+            Key::Control | Key::LControl | Key::RControl => {
+                Some(Modifier::Control as ModifierBitflag)
+            }
+            Key::Alt | Key::LAlt | Key::RAlt | Key::Option => {
+                Some(Modifier::Mod1 as ModifierBitflag)
+            }
+            Key::Numlock => Some(Modifier::Mod2 as ModifierBitflag),
+            // Key:: => Some(Modifier::Mod3 as ModifierBitflag),
+            Key::Command | Key::Super | Key::Windows | Key::Meta => {
+                Some(Modifier::Mod4 as ModifierBitflag)
+            }
+            Key::ModeChange => Some(Modifier::Mod5 as ModifierBitflag),
+            _ => None,
+        }
+    }
+
+    /// Add the Keysym to the keymap
+    ///
+    /// This does not apply the changes
     fn map(&mut self, keysym: Keysym) -> Result<Keycode, ConnectionError> {
         match self.unused_keycodes.pop_front() {
             // A keycode is unused so a mapping is possible
@@ -183,7 +213,9 @@ impl KeyMap {
         }
     }
 
-    // Map the the given keycode to the NoSymbol keysym so it can get reused
+    /// Remove the Keysym from the keymap
+    ///
+    /// This does not apply the changes
     fn unmap(&mut self, keysym: Keysym) {
         if let Some(&keycode) = self.keymap.get(&keysym) {
             self.needs_regeneration = true;
@@ -261,24 +293,39 @@ impl KeyMap {
         Some(keymap_len.try_into().unwrap())
     }
 
-    fn press_modifier(&mut self, pressed_modifier: u32) -> u32 {
-        self.modifiers |= pressed_modifier;
-        self.modifiers
+    /// Tells the keymap that a modifier was pressed
+    /// Updates the internal state of the modifiers and returns the new bitflag
+    /// representing the state of the modifiers
+    fn enter_modifier(
+        &mut self,
+        modifier: ModifierBitflag,
+        direction: Direction,
+    ) -> ModifierBitflag {
+        match direction {
+            Direction::Press => {
+                self.modifiers |= modifier;
+                self.modifiers
+            }
+            Direction::Release => {
+                self.modifiers &= !modifier;
+                self.modifiers
+            }
+            Direction::Click => self.modifiers,
+        }
     }
 
-    fn release_modifier(&mut self, released_modifier: u32) -> u32 {
-        self.modifiers &= !released_modifier;
-        self.modifiers
+    /// Tell the keymap that a modifier was pressed, released or clicked
+    /// If the key was a modifier, it's bitflag is returned
+    fn enter_key(&mut self, key: Key, direction: Direction) -> Option<ModifierBitflag> {
+        match direction {
+            Direction::Press => self.held.push(key),
+            Direction::Release => self.held.retain(|&k| k != key),
+            Direction::Click => (),
+        }
+        Self::is_modifier(key)
     }
 
-    fn pressed(&mut self, key: Key) {
-        self.held.push(key);
-    }
-
-    fn released(&mut self, key: Key) {
-        self.held.retain(|&k| k != key);
-    }
-
+    /// Returns a list of all currently pressed keys
     fn held(&mut self) -> Vec<Key> {
         self.held.clone()
     }
@@ -397,50 +444,49 @@ impl Con {
         time.try_into().unwrap()
     }
 
-    /// Apply XKB layout to virtual keyboard
-    /// The layout is an XKB layout as a string (see `generate_keymap_string`())
-    /// NOTE: This function does not flush any messages to Wayland, you have to
-    /// do that afterwards
+    /// Apply the current keymap
     ///
     /// # Errors
     /// TODO
-    fn apply_layout(&mut self) {
+    fn apply_keymap(&mut self) {
         if let Some(vk) = &self.virtual_keyboard {
             // Only send an updated keymap if we had to regenerate it
             if let Some(keymap_size) = self.keymap.regenerate() {
                 vk.keymap(1, self.keymap.file.as_ref().unwrap().as_fd(), keymap_size);
             }
+            self.event_queue.flush().unwrap();
         }
     }
 
     /// Press/Release a keycode
-    /// NOTE: This function does not synchronize the event queue
     ///
     /// # Errors
     /// TODO
-    fn send_key_event(&mut self, keycode: Keycode, press: bool) {
+    fn send_key_event(&mut self, keycode: Keycode, direction: Direction) {
         if let Some(vk) = &self.virtual_keyboard {
             let time = self.get_time();
             let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
-            let press = u32::from(press);
+            let press = match direction {
+                Direction::Press => 1,
+                Direction::Release => 0,
+                Direction::Click => unreachable!(),
+            };
 
             // Send key event message
             vk.key(time, keycode, press);
+            self.event_queue.flush().unwrap();
         }
     }
 
     // Try to enter the key
-    // If press is None, it is assumed that the key is pressed and released
-    // If press is true, the key is pressed
-    // Otherwise the key is released
-    fn press_key(&mut self, key: Key, press: Direction) {
+    fn enter_key(&mut self, key: Key, direction: Direction) {
         // Nothing to do
         if key == Key::Layout('\0') {
             return;
         }
 
         if self.keymap.make_room() {
-            self.event_queue.roundtrip(&mut self.state).unwrap();
+            self.apply_keymap();
         }
 
         let keycode = if let Key::Raw(kc) = key {
@@ -451,58 +497,34 @@ impl Con {
         };
 
         // Apply the new keymap if there were any changes
-        self.apply_layout();
+        self.apply_keymap();
 
-        let modifier = Self::is_modifier(key);
+        // Update the status of the keymap
+        let modifier = self.keymap.enter_key(key, direction);
 
-        match press {
-            Direction::Click => {
-                if let Some(m) = modifier {
-                    let modifiers = self.keymap.press_modifier(m);
-                    self.send_modifier_event(modifiers);
-                    let modifiers = self.keymap.release_modifier(m);
-                    self.send_modifier_event(modifiers);
-                } else {
-                    self.send_key_event(keycode, true);
-                    self.send_key_event(keycode, false);
-                }
+        // Send the events to the compositor
+        if let Some(m) = modifier {
+            if direction == Direction::Click || direction == Direction::Press {
+                let modifiers = self.keymap.enter_modifier(m, Direction::Press);
+                self.send_modifier_event(modifiers);
             }
-            Direction::Press => {
-                if let Some(m) = modifier {
-                    let modifiers = self.keymap.press_modifier(m);
-                    self.send_modifier_event(modifiers);
-                } else {
-                    self.send_key_event(keycode, true);
-                }
-                self.keymap.pressed(key);
+            if direction == Direction::Click || direction == Direction::Release {
+                let modifiers = self.keymap.enter_modifier(m, Direction::Release);
+                self.send_modifier_event(modifiers);
             }
-            Direction::Release => {
-                if let Some(m) = modifier {
-                    let modifiers = self.keymap.release_modifier(m);
-                    self.send_modifier_event(modifiers);
-                } else {
-                    self.send_key_event(keycode, false);
-                }
-                self.keymap.released(key);
+        } else {
+            if direction == Direction::Click || direction == Direction::Press {
+                self.send_key_event(keycode, Direction::Press);
+            }
+            if direction == Direction::Click || direction == Direction::Release {
+                self.send_key_event(keycode, Direction::Release);
             }
         }
     }
 
-    fn is_modifier(key: Key) -> Option<u32> {
-        match key {
-            Key::Shift | Key::LShift | Key::RShift => Some(Modifier::Shift as u32),
-            Key::CapsLock => Some(Modifier::Lock as u32),
-            Key::Control | Key::LControl | Key::RControl => Some(Modifier::Control as u32),
-            Key::Alt | Key::LAlt | Key::RAlt | Key::Option => Some(Modifier::Mod1 as u32),
-            Key::Numlock => Some(Modifier::Mod2 as u32),
-            // Key:: => Some(Modifier::Mod3 as u32),
-            Key::Command | Key::Super | Key::Windows | Key::Meta => Some(Modifier::Mod4 as u32),
-            Key::ModeChange => Some(Modifier::Mod5 as u32),
-            _ => None,
-        }
-    }
-
-    fn send_modifier_event(&mut self, modifiers: u32) {
+    /// Sends a modifier event with the updated bitflag of the modifiers to the
+    /// compositor
+    fn send_modifier_event(&mut self, modifiers: ModifierBitflag) {
         if let Some(vk) = &self.virtual_keyboard {
             vk.modifiers(modifiers, 0, 0, 0);
         }
@@ -524,7 +546,7 @@ impl Drop for Con {
     // Release the held keys before the connection is dropped
     fn drop(&mut self) {
         for &k in &self.keymap.held() {
-            self.press_key(k, Direction::Release);
+            self.enter_key(k, Direction::Release);
         }
 
         if let Some(vk) = &self.virtual_keyboard {
@@ -536,6 +558,7 @@ impl Drop for Con {
         if let Some(vp) = &self.virtual_pointer {
             vp.destroy();
         }
+        self.event_queue.flush().unwrap();
     }
 }
 
@@ -551,26 +574,24 @@ impl KeyboardControllable for Con {
         // otherwise fall back to using the virtual_keyboard method
         else {
             for c in string.chars() {
-                self.press_key(Key::Layout(c), Direction::Click);
+                self.enter_key(Key::Layout(c), Direction::Click);
             }
         }
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_down(&mut self, key: crate::Key) {
-        self.press_key(key, Direction::Press);
+        self.enter_key(key, Direction::Press);
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_up(&mut self, key: crate::Key) {
-        self.press_key(key, Direction::Release);
+        self.enter_key(key, Direction::Release);
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 
     fn key_click(&mut self, key: crate::Key) {
-        // TODO: Use Direction::Click here
-        self.press_key(key, Direction::Press);
-        self.press_key(key, Direction::Release);
+        self.enter_key(key, Direction::Click);
         self.event_queue.roundtrip(&mut self.state).unwrap();
     }
 }

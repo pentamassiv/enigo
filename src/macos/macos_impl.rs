@@ -6,8 +6,8 @@ use std::{
 
 use core_graphics::display::{CFIndex, CGDisplay, CGPoint};
 use core_graphics::event::{
-    CGEvent, CGEventTapLocation, CGEventType, CGKeyCode, CGMouseButton, EventField, KeyCode,
-    ScrollEventUnit,
+    CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGKeyCode, CGMouseButton, EventField,
+    KeyCode, ScrollEventUnit,
 };
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use objc::runtime::Class;
@@ -375,16 +375,18 @@ impl KeyboardControllableNext for Enigo {
         let keycode = self.key_to_keycode(key);
 
         if direction == Direction::Click || direction == Direction::Press {
-            thread::sleep(Duration::from_millis(20));
             let event = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, true)
                 .expect("Failed creating event");
+            let mod_flags = Self::pressed_modifiers();
+            event.set_flags(mod_flags);
             event.post(CGEventTapLocation::HID);
         }
 
         if direction == Direction::Click || direction == Direction::Release {
-            thread::sleep(Duration::from_millis(20));
             let event = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, false)
                 .expect("Failed creating event");
+            let mod_flags = Self::pressed_modifiers();
+            event.set_flags(mod_flags);
             event.post(CGEventTapLocation::HID);
         }
     }
@@ -399,6 +401,12 @@ impl Enigo {
     fn pressed_buttons() -> usize {
         let ns_event = Class::get("NSEvent").unwrap();
         unsafe { msg_send![ns_event, pressedMouseButtons] }
+    }
+
+    fn pressed_modifiers() -> CGEventFlags {
+        let ns_event = Class::get("NSEvent").unwrap();
+        let mod_flags = unsafe { msg_send![ns_event, modifierFlags] };
+        unsafe { CGEventFlags::from_bits_unchecked(mod_flags) }
     }
 
     // On macOS, we have to determine ourselves if it was a double click of a mouse

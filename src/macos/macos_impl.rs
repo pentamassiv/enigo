@@ -261,6 +261,12 @@ impl MouseControllableNext for Enigo {
             relative.1.into(),
         );
         event.post(CGEventTapLocation::HID);
+
+        // For some reason the mouse does not move if the absolute coordinate is (0,0)
+        // until there was another event. This circumvents that bug with the API by
+        // sending another one in this case
+        self.mouse_loc()?;
+
         Ok(())
     }
 
@@ -339,7 +345,8 @@ impl KeyboardControllableNext for Enigo {
             event.set_string(chunk);
             event.post(CGEventTapLocation::HID);
         }
-        thread::sleep(Duration::from_millis(2));
+        // Hack to avoid sleeps
+        let _ = self.mouse_loc();
         Ok(Some(()))
     }
 
@@ -358,7 +365,8 @@ impl KeyboardControllableNext for Enigo {
         let keycode = self.key_to_keycode(key);
 
         if direction == Direction::Click || direction == Direction::Press {
-            thread::sleep(Duration::from_millis(self.delay));
+            // Hack to avoid sleeps
+            let _ = self.mouse_loc();
             let Ok(event) = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, true)
             else {
                 return Err(InputError::Simulate(
@@ -369,7 +377,8 @@ impl KeyboardControllableNext for Enigo {
         }
 
         if direction == Direction::Click || direction == Direction::Release {
-            thread::sleep(Duration::from_millis(self.delay));
+            // Hack to avoid sleeps
+            let _ = self.mouse_loc();
             let Ok(event) = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, false)
             else {
                 return Err(InputError::Simulate(

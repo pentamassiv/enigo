@@ -122,6 +122,7 @@ impl Mouse for Enigo {
             );
             event.set_flags(CGEventFlags::CGEventFlagNonCoalesced);
             event.post(CGEventTapLocation::HID);
+            let _ = unsafe { NSEvent::mouseLocation() };
         }
         if direction == Direction::Click || direction == Direction::Release {
             let click_count = self.nth_button_press(button, Direction::Release);
@@ -153,6 +154,7 @@ impl Mouse for Enigo {
             );
             event.set_flags(CGEventFlags::CGEventFlagNonCoalesced);
             event.post(CGEventTapLocation::HID);
+            let _ = unsafe { NSEvent::mouseLocation() };
         }
         Ok(())
     }
@@ -203,6 +205,7 @@ impl Mouse for Enigo {
         );
         event.set_flags(CGEventFlags::CGEventFlagNonCoalesced);
         event.post(CGEventTapLocation::HID);
+        let _ = unsafe { NSEvent::mouseLocation() };
         Ok(())
     }
 
@@ -231,6 +234,7 @@ impl Mouse for Enigo {
         );
         event.set_flags(CGEventFlags::CGEventFlagNonCoalesced);
         event.post(CGEventTapLocation::HID);
+        let _ = unsafe { NSEvent::mouseLocation() };
         Ok(())
     }
 
@@ -293,12 +297,12 @@ impl Keyboard for Enigo {
                     continue;
                 }
                 if chunk.starts_with('\r') {
-                    self.text("\u{200B}\r")?;
+                    self.fast_text("\u{200B}\r")?;
                     chunk = &chunk[1..];
                     continue;
                 }
                 if chunk.starts_with('\n') {
-                    self.text("\u{200B}\n")?;
+                    self.fast_text("\u{200B}\n")?;
                     chunk = &chunk[1..];
                     continue;
                 }
@@ -311,8 +315,8 @@ impl Keyboard for Enigo {
                 self.event_source_user_data,
             );
             event.post(CGEventTapLocation::HID);
+            let _ = unsafe { NSEvent::mouseLocation() };
         }
-        thread::sleep(Duration::from_millis(2));
         Ok(Some(()))
     }
 
@@ -432,7 +436,6 @@ impl Keyboard for Enigo {
         debug!("\x1b[93mraw(keycode: {keycode:?}, direction: {direction:?})\x1b[0m");
 
         if direction == Direction::Click || direction == Direction::Press {
-            thread::sleep(Duration::from_millis(self.delay));
             let Ok(event) = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, true)
             else {
                 return Err(InputError::Simulate(
@@ -445,10 +448,10 @@ impl Keyboard for Enigo {
                 self.event_source_user_data,
             );
             event.post(CGEventTapLocation::HID);
+            let _ = unsafe { NSEvent::mouseLocation() };
         }
 
         if direction == Direction::Click || direction == Direction::Release {
-            thread::sleep(Duration::from_millis(self.delay));
             let Ok(event) = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, false)
             else {
                 return Err(InputError::Simulate(
@@ -461,6 +464,7 @@ impl Keyboard for Enigo {
                 self.event_source_user_data,
             );
             event.post(CGEventTapLocation::HID);
+            let _ = unsafe { NSEvent::mouseLocation() };
         }
 
         match direction {
@@ -599,6 +603,7 @@ impl Enigo {
                     self.event_source_user_data,
                 );
                 cg_event.post(CGEventTapLocation::HID);
+                let _ = unsafe { NSEvent::mouseLocation() };
             } else {
                 return Err(InputError::Simulate(
                     "failed creating event to press special key",
@@ -628,6 +633,7 @@ impl Enigo {
                     self.event_source_user_data,
                 );
                 cg_event.post(CGEventTapLocation::HID);
+                let _ = unsafe { NSEvent::mouseLocation() };
             } else {
                 return Err(InputError::Simulate(
                     "failed creating event to release special key",

@@ -26,6 +26,7 @@
 
     <script>
         let ignoreKeyEvents = false; // Flag to ignore key events
+        let readySent = false; // Flag to track if the 'Ready' message has been sent
 
         // Focus on the textarea when the page loads
         window.onload = () => {
@@ -52,9 +53,8 @@
             ws.send(message);
         };
 
-        document.addEventListener('open', (event) => handleEvent('Open', event));
         document.addEventListener('close', (event) => handleEvent('Close', event));
-        
+
         // Handle keydown events but ignore if flag is set
         document.addEventListener('keydown', (event) => {
             if (!ignoreKeyEvents) {
@@ -99,6 +99,24 @@
                 ignoreKeyEvents = false;
             }
         });
+
+        // Attach the open event listener
+        ws.addEventListener('open', () => {
+            if (!readySent) {
+                console.log('Ready (open)');
+                ws.send('Ready');
+                readySent = true;
+            }
+        });
+
+        // If the WebSocket is already open when the listener is attached, send the 'Ready' message immediately
+        if (ws.readyState === WebSocket.OPEN) {
+            if (!readySent) {
+                console.log('Ready (already open)');
+                ws.send('Ready');
+                readySent = true;
+            }
+        }
     </script>
 </body>
 

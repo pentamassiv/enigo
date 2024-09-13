@@ -11,7 +11,7 @@ pub enum BrowserEvent {
     MouseUp(u32),
     MouseMove((i32, i32), (i32, i32)), // (relative, absolute)
     MouseScroll(i32, i32),
-    Open,
+    Ready,
     Close,
 }
 

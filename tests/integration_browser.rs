@@ -6,6 +6,7 @@ use enigo::{
 mod common;
 use common::enigo_test::EnigoTest as Enigo;
 
+// If you run this test locally, make sure your adblocker does not block the request to the websocket. uBlock Origin seems to do it so it needs to get disabled for the test page
 #[test]
 fn integration_browser_events() {
     let mut enigo = Enigo::new(&Settings::default());

@@ -27,9 +27,16 @@ impl EnigoTest {
         EnigoTest::start_timeout_thread();
         let enigo = Enigo::new(settings).unwrap();
         let _ = &*super::browser::BROWSER_INSTANCE; // Launch Firefox
-        let websocket = Self::websocket();
+        let mut websocket = Self::websocket();
 
-        std::thread::sleep(std::time::Duration::from_secs(10)); // Give Firefox some time to launch
+        // Wait for Firefox to be ready
+        let ev = Self::read_message(&mut websocket);
+        if let BrowserEvent::Ready = ev {
+            println!("Browser was opened and is ready to receive input");
+        } else {
+            panic!("BrowserEvent was not Open: {ev:?}");
+        }
+
         Self { enigo, websocket }
     }
 
@@ -51,9 +58,9 @@ impl EnigoTest {
         println!("Sent message");
     }
 
-    fn read_message(&mut self) -> BrowserEvent {
+    fn read_message(websocket: &mut tungstenite::WebSocket<TcpStream>) -> BrowserEvent {
         println!("Waiting for message on Websocket");
-        let message = self.websocket.read().unwrap();
+        let message = websocket.read().unwrap();
         println!("Processing message");
 
         let Ok(browser_event) = BrowserEvent::try_from(message) else {
@@ -83,14 +90,14 @@ impl Keyboard for EnigoTest {
         println!("Attempt to clear the text");
         assert_eq!(
             BrowserEvent::ReadyForText,
-            self.read_message(),
+            Self::read_message(&mut self.websocket),
             "Failed to get ready for the text"
         );
         let res = self.enigo.text(text);
         std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
         self.send_message("GetText");
 
-        let ev = self.read_message();
+        let ev = Self::read_message(&mut self.websocket);
         if let BrowserEvent::Text(received_text) = ev {
             println!("received text: {received_text}");
             assert_eq!(text, received_text);
@@ -104,7 +111,7 @@ impl Keyboard for EnigoTest {
     fn key(&mut self, key: Key, direction: Direction) -> enigo::InputResult<()> {
         let res = self.enigo.key(key, direction);
         if direction == Press || direction == Click {
-            let ev = self.read_message();
+            let ev = Self::read_message(&mut self.websocket);
             if let BrowserEvent::KeyDown(name) = ev {
                 println!("received pressed key: {name}");
                 let key_name = if let Key::Unicode(char) = key {
@@ -120,7 +127,7 @@ impl Keyboard for EnigoTest {
         }
         if direction == Release || direction == Click {
             std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
-            let ev = self.read_message();
+            let ev = Self::read_message(&mut self.websocket);
             if let BrowserEvent::KeyUp(name) = ev {
                 println!("received released key: {name}");
                 let key_name = if let Key::Unicode(char) = key {
@@ -147,7 +154,7 @@ impl Mouse for EnigoTest {
     fn button(&mut self, button: enigo::Button, direction: Direction) -> enigo::InputResult<()> {
         let res = self.enigo.button(button, direction);
         if direction == Press || direction == Click {
-            let ev = self.read_message();
+            let ev = Self::read_message(&mut self.websocket);
             if let BrowserEvent::MouseDown(name) = ev {
                 println!("received pressed button: {name}");
                 assert_eq!(button as u32, name);
@@ -157,7 +164,7 @@ impl Mouse for EnigoTest {
         }
         if direction == Release || direction == Click {
             std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
-            let ev = self.read_message();
+            let ev = Self::read_message(&mut self.websocket);
             if let BrowserEvent::MouseUp(name) = ev {
                 println!("received released button: {name}");
                 assert_eq!(button as u32, name);
@@ -174,7 +181,7 @@ impl Mouse for EnigoTest {
         println!("Executed enigo.move_mouse");
         std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
 
-        let ev = self.read_message();
+        let ev = Self::read_message(&mut self.websocket);
         println!("Done waiting");
 
         let mouse_position = if let BrowserEvent::MouseMove(pos_rel, pos_abs) = ev {
@@ -204,7 +211,7 @@ impl Mouse for EnigoTest {
         let mut mouse_scroll;
         let mut step;
         while length > 0 {
-            let ev = self.read_message();
+            let ev = Self::read_message(&mut self.websocket);
             println!("Done waiting");
 
             (mouse_scroll, step) =

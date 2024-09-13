@@ -59,10 +59,7 @@ impl EnigoTest {
         let Ok(browser_event) = BrowserEvent::try_from(message) else {
             panic!("Other text received");
         };
-        assert!(
-            !(browser_event == BrowserEvent::Close),
-            "Received a Close event"
-        );
+        assert_ne!(browser_event, BrowserEvent::Close, "Received a Close event");
         browser_event
     }
 

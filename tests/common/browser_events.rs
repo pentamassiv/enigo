@@ -10,7 +10,7 @@ pub enum BrowserEvent {
     MouseDown(u32),
     MouseUp(u32),
     MouseMove((i32, i32), (i32, i32)), // (relative, absolute)
-    MouseScroll(i32, i32),
+    MouseScroll(i32, i32),             // (horizontal, vertical)
     Ready,
     Close,
 }

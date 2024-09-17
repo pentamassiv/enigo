@@ -32,7 +32,7 @@ impl EnigoTest {
             .move_mouse(start.0, start.1, Coordinate::Abs)
             .expect("unable to move the mouse to the starting position");
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let display_size = enigo.location().expect("unable to get the display size");
+
         let mouse_starting_position = enigo
             .location()
             .expect("unable to get the starting position of the mouse");
@@ -40,7 +40,7 @@ impl EnigoTest {
             mouse_starting_position, start,
             "mouse is not at the expecting starting position"
         );
-        let mouse = start;
+        let mouse = mouse_starting_position;
 
         // Create a listener for Firefox to connect to
         let listener = TcpListener::bind("127.0.0.1:26541").unwrap();
@@ -55,11 +55,12 @@ impl EnigoTest {
 
         // Wait for Firefox to be ready
         let ev = Self::read_message(&mut websocket);
-        if let BrowserEvent::Ready = ev {
+        let display_size = if let BrowserEvent::Ready(screen_width, screen_height) = ev {
             println!("Browser was opened and is ready to receive input");
+            (screen_width, screen_height)
         } else {
             panic!("BrowserEvent was not Open: {ev:?}");
-        }
+        };
 
         Self {
             enigo,
@@ -302,7 +303,7 @@ impl Mouse for EnigoTest {
             .main_display()
             .expect("can't get size of the display");
         println!("Executed enigo.main_display()");
-        assert_eq!(res, rdev_main_display(), "display sizes don't match");
+        assert_eq!(res, self.display_size);
 
         Ok(res)
     }
@@ -313,28 +314,12 @@ impl Mouse for EnigoTest {
             .location()
             .expect("can't get the position of the mouse");
         println!("Executed enigo.location()");
-        let position_from_other_crate = mouse_position();
+        let expected_position = self.mouse;
         assert_eq!(
-            res, position_from_other_crate,
+            res, expected_position,
             "position of the mouse is not what was expected"
         );
 
         Ok(res)
-    }
-}
-
-fn rdev_main_display() -> (i32, i32) {
-    use rdev::display_size;
-    let (x, y) = display_size().unwrap();
-    (x.try_into().unwrap(), y.try_into().unwrap())
-}
-
-fn mouse_position() -> (i32, i32) {
-    use mouse_position::mouse_position::Mouse;
-
-    if let Mouse::Position { x, y } = Mouse::get_mouse_position() {
-        (x, y)
-    } else {
-        panic!("the crate mouse_location was unable to get the position of the mouse");
     }
 }

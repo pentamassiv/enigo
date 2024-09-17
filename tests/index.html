@@ -100,11 +100,15 @@
             }
         });
 
+        // Get the screen width and height
+        const screenWidth = window.screen.width;
+        const screenHeight = window.screen.height;
+
         // Attach the open event listener
         ws.addEventListener('open', () => {
             if (!readySent) {
                 console.log('Ready (open)');
-                ws.send('Ready');
+                ws.send(`Ready(\"${screenWidth}\", \"${screenHeight}\")`);
                 readySent = true;
             }
         });
@@ -113,7 +117,7 @@
         if (ws.readyState === WebSocket.OPEN) {
             if (!readySent) {
                 console.log('Ready (already open)');
-                ws.send('Ready');
+                ws.send(`Ready(\"${screenWidth}\", \"${screenHeight}\")`);
                 readySent = true;
             }
         }

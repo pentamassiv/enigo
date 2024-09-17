@@ -17,3 +17,4 @@ Cargo.lock
 
 # VSCode
 .vscode/
+event_log.txt

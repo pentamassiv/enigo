@@ -27,7 +27,10 @@ exclude = [".github", "examples", ".gitignore", "rustfmt.toml"]
 all-features = true
 
 [features]
-default = ["xdo"]
+default = [
+    "xdo",
+    "serde",
+] # TODO: Remove serde again before committing I only added it for rust-analyzer to work
 libei = ["dep:reis", "dep:ashpd", "dep:pollster", "dep:once_cell"]
 serde = ["dep:serde"]
 wayland = [
@@ -101,3 +104,11 @@ mouse_position = "0.1.4"                         # Test the location() function
 name = "serde"
 path = "examples/serde.rs"
 required-features = ["serde"]
+
+#[[test]]
+#name = "integration_tao"
+#path = "tests/integration_tao.rs"
+#required-features = ["serde"]
+
+[workspace]
+members = ["helper_app"]

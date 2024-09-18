@@ -108,7 +108,7 @@
         ws.addEventListener('open', () => {
             if (!readySent) {
                 console.log('Ready (open)');
-                ws.send(`Ready(\"${screenWidth}\", \"${screenHeight}\")`);
+                ws.send(`Ready(${screenWidth}, ${screenHeight})`);
                 readySent = true;
             }
         });

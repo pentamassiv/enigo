@@ -15,7 +15,7 @@ const TIMEOUT: u64 = 5; // Number of minutes the test is allowed to run before t
                         // would run indefinitely without a timeout if they don't receive a message
 
 pub struct EnigoTest {
-    enigo: Enigo,
+    enigo: Option<Enigo>, // This has to be an Option so we can drop it within the Drop trait before comparing the events
     display_size: (i32, i32),
     mouse: (i32, i32),
     websocket: tungstenite::WebSocket<TcpStream>,
@@ -63,7 +63,7 @@ impl EnigoTest {
         };
 
         Self {
-            enigo,
+            enigo: Some(enigo),
             display_size,
             mouse,
             websocket,
@@ -105,71 +105,15 @@ impl EnigoTest {
         });
     }
 
-    fn check_events(self) {
-        /* assert_eq!(
-            BrowserEvent::ReadyForText,
-            Self::read_message(&mut self.websocket),
-            "Failed to get ready for the text"
-        );*/
-        /*    let ev = Self::read_message(&mut self.websocket);
-        if let BrowserEvent::Text(received_text) = ev {
-            println!("received text: {received_text}");
-            assert_eq!(text, received_text);
-        } else {
-            panic!("BrowserEvent was not a Text: {ev:?}");
-        }*/
-        /*
-        if direction == Press || direction == Click {
-            let ev = Self::read_message(&mut self.websocket);
-            if let BrowserEvent::KeyDown(name) = ev {
-                println!("received pressed key: {name}");
-                let key_name = if let Key::Unicode(char) = key {
-                    format!("{char}")
-                } else {
-                    format!("{key:?}").to_lowercase()
-                };
-                println!("key_name: {key_name}");
-                assert_eq!(key_name, name.to_lowercase());
-            } else {
-                panic!("BrowserEvent was not a KeyDown: {ev:?}");
-            }
-        }*/
-
-        /*
-         if direction == Release || direction == Click {
-            std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
-            let ev = Self::read_message(&mut self.websocket);
-            if let BrowserEvent::KeyUp(name) = ev {
-                println!("received released key: {name}");
-                let key_name = if let Key::Unicode(char) = key {
-                    format!("{char}")
-                } else {
-                    format!("{key:?}").to_lowercase()
-                };
-                println!("key_name: {key_name}");
-                assert_eq!(key_name, name.to_lowercase());
-            } else {
-                panic!("BrowserEvent was not a KeyUp: {ev:?}");
-            }
-        }*/
-
-        /*
-
-        let mouse_position = if let BrowserEvent::MouseMove(pos_rel, pos_abs) = ev {
-            match coordinate {
-                Coordinate::Rel => pos_rel,
-                Coordinate::Abs => pos_abs,
-            }
-        } else {
-            panic!("BrowserEvent was not a MouseMove: {ev:?}");
-        };
-
-        assert_eq!(x, mouse_position.0);
-        assert_eq!(y, mouse_position.1);
-
-         */
+    /// Check if all currently expected events were actually received and removes them from the Vec
+    fn check_events(&mut self) {
+        for expected_event in self.expected_events.drain(..) {
+            let actual_event = Self::read_message(&mut self.websocket);
+            assert_eq!(expected_event, actual_event);
+        }
     }
 
+    /// Get the name of the Key
     fn key_name(key: Key) -> String {
         if let Key::Unicode(char) = key {
             format!("{char}")
@@ -185,7 +129,11 @@ impl Keyboard for EnigoTest {
         self.send_message("ClearText");
         println!("Attempt to clear the text");
         self.expected_events.push(BrowserEvent::ReadyForText); // Kinda pointless now that we no longer wait for it
-        self.enigo.text(text).expect("Unable to send text");
+        self.enigo
+            .as_mut()
+            .unwrap()
+            .text(text)
+            .expect("Unable to send text");
         println!("Executed enigo.text({text})");
         self.expected_events
             .push(BrowserEvent::Text(text.to_string()));
@@ -196,6 +144,8 @@ impl Keyboard for EnigoTest {
 
     fn key(&mut self, key: Key, direction: Direction) -> enigo::InputResult<()> {
         self.enigo
+            .as_mut()
+            .unwrap()
             .key(key, direction)
             .expect("failed to enter the key");
         println!("Executed enigo.key({key:?}, {direction:?})");
@@ -219,6 +169,8 @@ impl Keyboard for EnigoTest {
 impl Mouse for EnigoTest {
     fn button(&mut self, button: enigo::Button, direction: Direction) -> enigo::InputResult<()> {
         self.enigo
+            .as_mut()
+            .unwrap()
             .button(button, direction)
             .expect("failed to press the button");
         println!("Executed enigo.button({button:?}, {direction:?})");
@@ -239,6 +191,8 @@ impl Mouse for EnigoTest {
 
         let prev_coordinate = self.mouse;
         self.enigo
+            .as_mut()
+            .unwrap()
             .move_mouse(x, y, coordinate)
             .expect("unable to move the mouse");
         println!("Executed enigo.move_mouse({x}, {y}, {coordinate:?})");
@@ -267,7 +221,11 @@ impl Mouse for EnigoTest {
     }
 
     fn scroll(&mut self, length: i32, axis: Axis) -> enigo::InputResult<()> {
-        self.enigo.scroll(length, axis).expect("unable to scroll");
+        self.enigo
+            .as_mut()
+            .unwrap()
+            .scroll(length, axis)
+            .expect("unable to scroll");
         println!("Executed enigo.scroll({length}, {axis:?})");
 
         // On some platforms it is not possible to scroll multiple lines so we
@@ -300,6 +258,8 @@ impl Mouse for EnigoTest {
     fn main_display(&self) -> enigo::InputResult<(i32, i32)> {
         let res = self
             .enigo
+            .as_ref()
+            .unwrap()
             .main_display()
             .expect("can't get size of the display");
         println!("Executed enigo.main_display()");
@@ -311,6 +271,8 @@ impl Mouse for EnigoTest {
     fn location(&self) -> enigo::InputResult<(i32, i32)> {
         let res = self
             .enigo
+            .as_ref()
+            .unwrap()
             .location()
             .expect("can't get the position of the mouse");
         println!("Executed enigo.location()");
@@ -321,5 +283,19 @@ impl Mouse for EnigoTest {
         );
 
         Ok(res)
+    }
+}
+
+impl Drop for EnigoTest {
+    fn drop(&mut self) {
+        // On macOS, it's crucial to drop the `Enigo` struct only after all simulated events have been processed by the OS.
+        // Dropping `Enigo` before this may result in the events being ignored.
+        // To test proper event handling, we set self.enigo to none and drop the struct immediately after the last simulated event and verify that the event was processed correctly.
+        self.enigo = None;
+
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        // Check if all expected events were received
+        self.check_events();
     }
 }

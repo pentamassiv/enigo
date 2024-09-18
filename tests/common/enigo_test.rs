@@ -110,6 +110,7 @@ impl EnigoTest {
         for expected_event in self.expected_events.drain(..) {
             let actual_event = Self::read_message(&mut self.websocket);
             assert_eq!(expected_event, actual_event);
+            println!("{:?} was actually received", expected_event);
         }
     }
 
@@ -296,6 +297,7 @@ impl Drop for EnigoTest {
         std::thread::sleep(std::time::Duration::from_secs(2));
 
         // Check if all expected events were received
+        println!("Expected events: {:?}", self.expected_events);
         self.check_events();
     }
 }

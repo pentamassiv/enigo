@@ -118,7 +118,7 @@ impl EnigoTest {
         if let Key::Unicode(char) = key {
             format!("{char}")
         } else {
-            format!("{key:?}").to_lowercase()
+            format!("{key:?}") //.to_lowercase()
         }
     }
 }

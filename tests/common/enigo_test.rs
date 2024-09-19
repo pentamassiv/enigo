@@ -61,6 +61,7 @@ impl EnigoTest {
         } else {
             panic!("BrowserEvent was not Open: {ev:?}");
         };
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
         Self {
             enigo: Some(enigo),

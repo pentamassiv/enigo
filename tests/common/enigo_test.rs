@@ -128,9 +128,9 @@ impl EnigoTest {
 impl Keyboard for EnigoTest {
     // This does not work for all text or the library does not work properly
     fn fast_text(&mut self, text: &str) -> enigo::InputResult<Option<()>> {
-        self.send_message("ClearText");
-        println!("Attempt to clear the text");
-        self.expected_events.push(BrowserEvent::ReadyForText); // Kinda pointless now that we no longer wait for it
+        // self.send_message("ClearText");
+        //  println!("Attempt to clear the text");
+        //  self.expected_events.push(BrowserEvent::ReadyForText); // Kinda pointless now that we no longer wait for it
         self.enigo
             .as_mut()
             .unwrap()

@@ -27,7 +27,7 @@ pub static BROWSER_INSTANCE: std::sync::LazyLock<Option<std::process::Child>> =
         } else {
             // On Linux, use the "firefox" command
             std::process::Command::new("firefox")
-                .args(["--kiosk", &url])
+                .args([&url])
                 .spawn()
                 .expect("Failed to start Firefox")
         };

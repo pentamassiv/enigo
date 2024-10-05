@@ -54,9 +54,28 @@
 
         document.addEventListener('open', (event) => handleEvent('Open', event));
         document.addEventListener('close', (event) => handleEvent('Close', event));
-        
+
         // Handle keydown events but ignore if flag is set
         document.addEventListener('keydown', (event) => {
+            console.log('--- KeyDown Event Details ---');
+            console.log(`key: ${event.key}`);               // The key value
+            console.log(`code: ${event.code}`);             // The physical key code
+            console.log(`keyCode: ${event.keyCode}`);       // The key code (deprecated)
+            console.log(`which: ${event.which}`);           // Which code (deprecated)
+            console.log(`charCode: ${event.charCode}`);     // Char code (keypress only, deprecated)
+            console.log(`shiftKey: ${event.shiftKey}`);     // Is Shift key pressed?
+            console.log(`ctrlKey: ${event.ctrlKey}`);       // Is Ctrl key pressed?
+            console.log(`altKey: ${event.altKey}`);         // Is Alt key pressed?
+            console.log(`metaKey: ${event.metaKey}`);       // Is Meta (Cmd/Win) key pressed?
+            console.log(`repeat: ${event.repeat}`);         // Is the key being held down?
+            console.log(`isComposing: ${event.isComposing}`); // Is it during text composition?
+            console.log(`location: ${event.location}`);     // Key location on keyboard
+            console.log(`bubbles: ${event.bubbles}`);       // Does event bubble up the DOM?
+            console.log(`cancelable: ${event.cancelable}`); // Can the event be canceled?
+            console.log(`defaultPrevented: ${event.defaultPrevented}`); // Was preventDefault() called?
+            console.log(`composed: ${event.composed}`);     // Is the event part of a composed path (for Shadow DOM)?
+            console.log('--- End of Event Details ---');
+
             if (!ignoreKeyEvents) {
                 handleEvent('KeyDown', `(\"${event.key}\")`);
             }
@@ -64,6 +83,26 @@
 
         // Handle keyup events but ignore if flag is set
         document.addEventListener('keyup', (event) => {
+
+            console.log('--- KeyDown Event Details ---');
+            console.log(`key: ${event.key}`);               // The key value
+            console.log(`code: ${event.code}`);             // The physical key code
+            console.log(`keyCode: ${event.keyCode}`);       // The key code (deprecated)
+            console.log(`which: ${event.which}`);           // Which code (deprecated)
+            console.log(`charCode: ${event.charCode}`);     // Char code (keypress only, deprecated)
+            console.log(`shiftKey: ${event.shiftKey}`);     // Is Shift key pressed?
+            console.log(`ctrlKey: ${event.ctrlKey}`);       // Is Ctrl key pressed?
+            console.log(`altKey: ${event.altKey}`);         // Is Alt key pressed?
+            console.log(`metaKey: ${event.metaKey}`);       // Is Meta (Cmd/Win) key pressed?
+            console.log(`repeat: ${event.repeat}`);         // Is the key being held down?
+            console.log(`isComposing: ${event.isComposing}`); // Is it during text composition?
+            console.log(`location: ${event.location}`);     // Key location on keyboard
+            console.log(`bubbles: ${event.bubbles}`);       // Does event bubble up the DOM?
+            console.log(`cancelable: ${event.cancelable}`); // Can the event be canceled?
+            console.log(`defaultPrevented: ${event.defaultPrevented}`); // Was preventDefault() called?
+            console.log(`composed: ${event.composed}`);     // Is the event part of a composed path (for Shadow DOM)?
+            console.log('--- End of Event Details ---');
+
             if (!ignoreKeyEvents) {
                 handleEvent('KeyUp', `(\"${event.key}\")`);
             }

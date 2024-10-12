@@ -310,7 +310,8 @@ impl Keyboard for Enigo {
                 EventField::EVENT_SOURCE_USER_DATA,
                 self.event_source_user_data,
             );
-            event.set_flags(self.event_flags); // TODO: Check if this is a good idea
+            event.set_flags(self.event_flags); // TODO: Check if this is a good idea (maybe use CGEventFlags::CGEventFlagNull
+                                               // here?)
             event.post(CGEventTapLocation::HID);
         }
         Ok(Some(()))
@@ -443,6 +444,7 @@ impl Keyboard for Enigo {
                 EventField::EVENT_SOURCE_USER_DATA,
                 self.event_source_user_data,
             );
+            self.add_event_flag(keycode, Direction::Press);
             event.set_flags(self.event_flags);
             event.post(CGEventTapLocation::HID);
         }
@@ -459,6 +461,7 @@ impl Keyboard for Enigo {
                 EventField::EVENT_SOURCE_USER_DATA,
                 self.event_source_user_data,
             );
+            self.add_event_flag(keycode, Direction::Release);
             event.set_flags(self.event_flags);
             event.post(CGEventTapLocation::HID);
         }
@@ -587,7 +590,7 @@ impl Enigo {
                     EventField::EVENT_SOURCE_USER_DATA,
                     self.event_source_user_data,
                 );
-                event.set_flags(self.event_flags);
+                cg_event.set_flags(self.event_flags);
                 cg_event.post(CGEventTapLocation::HID);
             } else {
                 return Err(InputError::Simulate(
@@ -617,7 +620,7 @@ impl Enigo {
                     EventField::EVENT_SOURCE_USER_DATA,
                     self.event_source_user_data,
                 );
-                event.set_flags(self.event_flags);
+                cg_event.set_flags(self.event_flags);
                 cg_event.post(CGEventTapLocation::HID);
             } else {
                 return Err(InputError::Simulate(
@@ -632,6 +635,49 @@ impl Enigo {
     unsafe fn ns_event_cg_event(event: &NSEvent) -> &CGEventRef {
         let ptr: *mut c_void = unsafe { msg_send![event, CGEvent] };
         unsafe { CGEventRef::from_ptr(ptr.cast()) }
+    }
+
+    #[allow(clippy::match_same_arms)] // TODO: Remove this once the values for KeyCode were upstreamed: https://github.com/servo/core-foundation-rs/pull/712
+    fn add_event_flag(&mut self, keycode: CGKeyCode, direction: Direction) {
+        let set = match direction {
+            Direction::Click => {
+                return;
+            }
+            Direction::Press => true,
+            Direction::Release => false,
+        };
+
+        let event_flag = match keycode {
+            KeyCode::CAPS_LOCK => CGEventFlags::CGEventFlagAlphaShift,
+            KeyCode::SHIFT | KeyCode::RIGHT_SHIFT => CGEventFlags::CGEventFlagShift,
+            KeyCode::CONTROL | KeyCode::RIGHT_CONTROL => CGEventFlags::CGEventFlagControl,
+            KeyCode::OPTION | KeyCode::RIGHT_OPTION => CGEventFlags::CGEventFlagAlternate,
+            KeyCode::COMMAND | KeyCode::RIGHT_COMMAND => CGEventFlags::CGEventFlagCommand,
+            KeyCode::HELP => CGEventFlags::CGEventFlagHelp,
+            // KeyCode:: => CGEventFlags::CGEventFlagSecondaryFn, TODO: Check if a KeyCode exists
+            // that requires this flag to get set
+            83 => CGEventFlags::CGEventFlagNumericPad, // Numpad 1
+            84 => CGEventFlags::CGEventFlagNumericPad, // Numpad 2
+            85 => CGEventFlags::CGEventFlagNumericPad, // Numpad 3
+            86 => CGEventFlags::CGEventFlagNumericPad, // Numpad 4
+            87 => CGEventFlags::CGEventFlagNumericPad, // Numpad 5
+            88 => CGEventFlags::CGEventFlagNumericPad, // Numpad 6
+            89 => CGEventFlags::CGEventFlagNumericPad, // Numpad 7
+            91 => CGEventFlags::CGEventFlagNumericPad, // Numpad 8
+            92 => CGEventFlags::CGEventFlagNumericPad, // Numpad 9
+            82 => CGEventFlags::CGEventFlagNumericPad, // Numpad 0
+            67 => CGEventFlags::CGEventFlagNumericPad, // Numpad *
+            75 => CGEventFlags::CGEventFlagNumericPad, // Numpad /
+            69 => CGEventFlags::CGEventFlagNumericPad, // Numpad +
+            78 => CGEventFlags::CGEventFlagNumericPad, // Numpad -
+            81 => CGEventFlags::CGEventFlagNumericPad, // Numpad =
+            65 => CGEventFlags::CGEventFlagNumericPad, // Numpad .
+            71 => CGEventFlags::CGEventFlagNumericPad, // Numpad clear
+            76 => CGEventFlags::CGEventFlagNumericPad, // Numpad enter
+            95 => CGEventFlags::CGEventFlagNumericPad, // Numpad Comma/Separator (JIS layout)
+            _ => CGEventFlags::CGEventFlagNull,
+        };
+        self.event_flags.set(event_flag, set);
     }
 }
 

@@ -77,6 +77,7 @@ pub struct Enigo {
     held: (Vec<Key>, Vec<CGKeyCode>), // Currently held keys
     event_source_user_data: i64,
     release_keys_when_dropped: bool,
+    event_flags: CGEventFlags,
     double_click_delay: Duration,
     // TODO: Use mem::variant_count::<Button>() here instead of 7 once it is stabilized
     last_mouse_click: [(i64, Instant); 7], /* For each of the seven Button variants, we
@@ -119,7 +120,7 @@ impl Mouse for Enigo {
                 EventField::EVENT_SOURCE_USER_DATA,
                 self.event_source_user_data,
             );
-            event.set_flags(CGEventFlags::CGEventFlagNonCoalesced);
+            event.set_flags(self.event_flags);
             event.post(CGEventTapLocation::HID);
         }
         if direction == Direction::Click || direction == Direction::Release {
@@ -150,7 +151,7 @@ impl Mouse for Enigo {
                 EventField::EVENT_SOURCE_USER_DATA,
                 self.event_source_user_data,
             );
-            event.set_flags(CGEventFlags::CGEventFlagNonCoalesced);
+            event.set_flags(self.event_flags);
             event.post(CGEventTapLocation::HID);
         }
         Ok(())
@@ -200,7 +201,7 @@ impl Mouse for Enigo {
             EventField::EVENT_SOURCE_USER_DATA,
             self.event_source_user_data,
         );
-        event.set_flags(CGEventFlags::CGEventFlagNonCoalesced);
+        event.set_flags(self.event_flags);
         event.post(CGEventTapLocation::HID);
         Ok(())
     }
@@ -228,7 +229,7 @@ impl Mouse for Enigo {
             EventField::EVENT_SOURCE_USER_DATA,
             self.event_source_user_data,
         );
-        event.set_flags(CGEventFlags::CGEventFlagNonCoalesced);
+        event.set_flags(self.event_flags);
         event.post(CGEventTapLocation::HID);
         Ok(())
     }
@@ -309,6 +310,7 @@ impl Keyboard for Enigo {
                 EventField::EVENT_SOURCE_USER_DATA,
                 self.event_source_user_data,
             );
+            event.set_flags(self.event_flags); // TODO: Check if this is a good idea
             event.post(CGEventTapLocation::HID);
         }
         Ok(Some(()))
@@ -441,6 +443,7 @@ impl Keyboard for Enigo {
                 EventField::EVENT_SOURCE_USER_DATA,
                 self.event_source_user_data,
             );
+            event.set_flags(self.event_flags);
             event.post(CGEventTapLocation::HID);
         }
 
@@ -456,6 +459,7 @@ impl Keyboard for Enigo {
                 EventField::EVENT_SOURCE_USER_DATA,
                 self.event_source_user_data,
             );
+            event.set_flags(self.event_flags);
             event.post(CGEventTapLocation::HID);
         }
 
@@ -499,6 +503,8 @@ impl Enigo {
 
         let held = (Vec::new(), Vec::new());
 
+        let event_flags = CGEventFlags::CGEventFlagNonCoalesced;
+
         let double_click_delay = Duration::from_secs(1);
         let double_click_delay_setting = unsafe { NSEvent::doubleClickInterval() };
         // Returns the double click interval (https://developer.apple.com/documentation/appkit/nsevent/1528384-doubleclickinterval). This is a TimeInterval which is a f64 of the number of seconds
@@ -520,6 +526,7 @@ impl Enigo {
             display: CGDisplay::main(),
             held,
             release_keys_when_dropped: *release_keys_when_dropped,
+            event_flags,
             double_click_delay,
             last_mouse_click: [(0, Instant::now()); 7],
             event_source_user_data: event_source_user_data.unwrap_or(crate::EVENT_MARKER as i64),
@@ -580,6 +587,7 @@ impl Enigo {
                     EventField::EVENT_SOURCE_USER_DATA,
                     self.event_source_user_data,
                 );
+                event.set_flags(self.event_flags);
                 cg_event.post(CGEventTapLocation::HID);
             } else {
                 return Err(InputError::Simulate(
@@ -609,6 +617,7 @@ impl Enigo {
                     EventField::EVENT_SOURCE_USER_DATA,
                     self.event_source_user_data,
                 );
+                event.set_flags(self.event_flags);
                 cg_event.post(CGEventTapLocation::HID);
             } else {
                 return Err(InputError::Simulate(

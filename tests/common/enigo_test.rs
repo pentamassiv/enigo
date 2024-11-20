@@ -19,6 +19,8 @@ const SCROLL_STEP: (i32, i32) = (20, 114); // (horizontal, vertical)
 pub struct EnigoTest {
     enigo: Enigo,
     websocket: tungstenite::WebSocket<TcpStream>,
+    #[allow(dead_code)] // Used on Windows
+    win_mouse_acceleration: bool,
 }
 
 impl EnigoTest {
@@ -28,9 +30,18 @@ impl EnigoTest {
         let enigo = Enigo::new(settings).unwrap();
         let _ = &*super::browser::BROWSER_INSTANCE; // Launch Firefox
         let websocket = Self::websocket();
+        let win_mouse_acceleration = if cfg!(windows) {
+            settings.windows_subject_to_mouse_speed_and_acceleration_level
+        } else {
+            false
+        };
 
         std::thread::sleep(std::time::Duration::from_secs(10)); // Give Firefox some time to launch
-        Self { enigo, websocket }
+        Self {
+            enigo,
+            websocket,
+            win_mouse_acceleration,
+        }
     }
 
     fn websocket() -> tungstenite::WebSocket<TcpStream> {
@@ -172,6 +183,17 @@ impl Mouse for EnigoTest {
     fn move_mouse(&mut self, x: i32, y: i32, coordinate: Coordinate) -> enigo::InputResult<()> {
         let res = self.enigo.move_mouse(x, y, coordinate);
         println!("Executed enigo.move_mouse");
+
+        // On Windows the OS either ignores relative mouse moves by 0 or Firefox doesn't
+        // create events for them We need to return here so not wait forever for
+        // the browser to send a message via websocket
+        #[cfg(target_os = "windows")]
+        {
+            if coordinate == Coordinate::Rel && x == 0 && y == 0 {
+                println!("Relative mouse move by (0, 0) detected. We are not waiting for a response, because the OS ignores these calls");
+                return res;
+            }
+        }
         std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
 
         let ev = self.read_message();
@@ -186,8 +208,23 @@ impl Mouse for EnigoTest {
             panic!("BrowserEvent was not a MouseMove: {ev:?}");
         };
 
+        #[cfg(target_os = "windows")]
+        {
+            if self.win_mouse_acceleration {
+                let (x, y) = enigo::calc_rel_mouse_location(x, y);
+                // TODO: Improve the calculation of the new mouse location so that we can
+                // predict it exeactly
+                assert!(i32::abs(x - mouse_position.0) <= 1);
+                assert!(i32::abs(y - mouse_position.1) <= 1);
+
+                println!("enigo.move_mouse() was a success");
+                return res;
+            };
+        }
+
         assert_eq!(x, mouse_position.0);
         assert_eq!(y, mouse_position.1);
+
         println!("enigo.move_mouse() was a success");
         res
     }

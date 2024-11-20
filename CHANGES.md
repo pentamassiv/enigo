@@ -3,6 +3,7 @@
 - Rust: MSRV is 1.82
 
 ## Added
+- win: The function `calc_rel_mouse_location` can calculate the next mouse position before a relative mouse move happens
 
 ## Removed
 

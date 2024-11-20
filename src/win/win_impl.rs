@@ -531,6 +531,106 @@ impl Enigo {
     }
 }
 
+/// Relative mouse motion is subject to the settings for mouse speed and
+/// acceleration level. This function calculates the new location
+//
+// Quote from documentation (http://web.archive.org/web/20241118235853/https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-mouse_event):
+// Relative mouse motion is subject to the settings for mouse speed and
+// acceleration level. An end user sets these values using the Mouse application
+// in Control Panel. An application obtains and sets these values with the
+// SystemParametersInfo function.
+//
+// The system applies two tests to the specified relative mouse motion when
+// applying acceleration. If the specified distance along either the x or y axis
+// is greater than the first mouse threshold value, and the mouse acceleration
+// level is not zero, the operating system doubles the distance. If the
+// specified distance along either the x- or y-axis is greater than the second
+// mouse threshold value, and the mouse acceleration level is equal to two, the
+// operating system doubles the distance that resulted from applying the first
+// threshold test. It is thus possible for the operating system to multiply
+// relatively-specified mouse motion along the x- or y-axis by up to four times.
+//
+// Once acceleration has been applied, the system scales the resultant value by
+// the desired mouse speed. Mouse speed can range from 1 (slowest) to 20
+// (fastest) and represents how much the pointer moves based on the distance the
+// mouse moves. The default value is 10, which results in no additional
+// modification to the mouse motion.
+//
+// TODO: Improve the calculation of the new mouse location so that we can
+// predict it exeactly. Right now there seem to be rounding errors and the
+// location sometimes is off by 1
+#[cfg(target_os = "windows")]
+#[must_use]
+pub fn calc_rel_mouse_location(x: i32, y: i32) -> (i32, i32) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETMOUSE, SPI_GETMOUSESPEED, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    };
+    debug!("rel_move: ({x}, {y})");
+
+    // Retrieve mouse acceleration thresholds and level
+    let mut mouse_params = [0i32; 3];
+    unsafe {
+        if SystemParametersInfoW(
+            SPI_GETMOUSE,
+            0, // Not used
+            Some(mouse_params.as_mut_ptr().cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0), /* We are not setting a parameter so it can
+                                                     * be zero */
+        )
+        .is_err()
+        {
+            error!("unable to get the mouse params");
+            let last_err = std::io::Error::last_os_error();
+            error!("{last_err}");
+            mouse_params = [6, 10, 1]; // Default values taken from my system
+            error!("assumed default value for mouse_params: {mouse_params:?}");
+        }
+    }
+
+    let [threshold1, threshold2, acceleration_level] = mouse_params;
+    debug!("threshold1: {threshold1}, threshold2: {threshold2}, acceleration_level:{acceleration_level}");
+
+    // Retrieve mouse speed
+    let mut mouse_speed = 0i32;
+
+    unsafe {
+        if SystemParametersInfoW(
+            SPI_GETMOUSESPEED,
+            0, // Not used
+            Some((&raw mut mouse_speed).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0), /* We are not setting a parameter so it can
+                                                     * be zero */
+        )
+        .is_err()
+        {
+            error!("unable to get the mouse params");
+            let last_err = std::io::Error::last_os_error();
+            error!("{last_err}");
+            mouse_speed = 10; // Default value (Source: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa)
+            error!("assumed default value for mouse speed: {mouse_speed}");
+        }
+    }
+    let mouse_speed = mouse_speed as f64;
+
+    let mut multiplier = 1;
+    if acceleration_level != 0 && (x.abs() > threshold1 || y.abs() > threshold1) {
+        multiplier = 2;
+    }
+    if acceleration_level == 2 && (x.abs() > threshold2 || y.abs() > threshold2) {
+        multiplier *= 2;
+    }
+    debug!("multiplier: {multiplier}");
+
+    let accelerated_x = (multiplier * x) as f64;
+    let accelerated_y = (multiplier * y) as f64;
+    debug!("accelerated_x: {accelerated_x}, accelerated_y: {accelerated_y}");
+
+    let scaled_x = (accelerated_x * (mouse_speed / 10.0)).round() as i32;
+    let scaled_y = (accelerated_y * (mouse_speed / 10.0)).round() as i32;
+
+    (scaled_x, scaled_y)
+}
+
 impl Drop for Enigo {
     // Release the held keys before the connection is dropped
     fn drop(&mut self) {
@@ -553,6 +653,77 @@ impl Drop for Enigo {
 }
 
 mod test {
+
+    #[test]
+    #[ignore] // The calculation of the future location is off
+    fn unit_win_rel_mouse_move() {
+        use crate::{
+            Coordinate::{Abs, Rel},
+            Mouse as _,
+        };
+        let mut enigo = super::Enigo::new(&crate::Settings {
+            windows_subject_to_mouse_speed_and_acceleration_level: true,
+            ..Default::default()
+        })
+        .unwrap();
+
+        let test_cases = vec![
+            ((100, 100), Abs),
+            ((0, 0), Rel),
+            ((-0, 0), Rel),
+            ((0, -0), Rel),
+            ((-0, -0), Rel),
+            ((1, 0), Rel),
+            ((0, 1), Rel),
+            ((-1, -1), Rel),
+            ((4, 6), Rel),
+            ((-42, 63), Rel),
+            ((12, -20), Rel),
+            ((-43, -1), Rel),
+            ((200, 200), Rel),
+            ((-200, 200), Rel),
+            ((200, -200), Rel),
+            ((-200, -200), Rel),
+        ];
+
+        let mut expected_location = (0, 0);
+        let mut epsilon;
+        for ((x, y), coord) in test_cases {
+            match coord {
+                Abs => {
+                    expected_location = (x, y);
+                    epsilon = 0;
+                }
+                Rel => {
+                    let calc_rel_move = super::calc_rel_mouse_location(x, y);
+                    expected_location.0 += calc_rel_move.0;
+                    expected_location.1 += calc_rel_move.1;
+                    epsilon = 1;
+                }
+            };
+
+            enigo.move_mouse(x, y, coord).unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            let actual_location = enigo.location().unwrap();
+            println!("test case: ({x},{y}) {coord:?}");
+            println!(" expected_location: {expected_location:?}");
+            println!(" actual_location:   {actual_location:?}");
+            assert!(
+                i32::abs(expected_location.0 - actual_location.0) <= epsilon,
+                "expected_location.0: {}, actual_location.0: {}",
+                expected_location.0,
+                actual_location.0
+            );
+            assert!(
+                i32::abs(expected_location.1 - actual_location.1) <= epsilon,
+                "expected_location.1: {}, actual_location.1: {}",
+                expected_location.1,
+                actual_location.1
+            );
+            // Correct the coordinate
+            expected_location = actual_location;
+        }
+    }
 
     #[test]
     fn extended_key() {
@@ -580,15 +751,12 @@ mod test {
         ];
 
         for key in known_extended_keys {
-            assert_eq!(
-                true,
-                super::Enigo::is_extended_key(key),
-                "Failed for {key:#?}"
-            )
+            assert!(super::Enigo::is_extended_key(key), "Failed for {key:#?}");
         }
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn regular_key() {
         use windows::Win32::UI::Input::KeyboardAndMouse::{
             VK__none_, VK_0, VK_1, VK_2, VK_3, VK_4, VK_5, VK_6, VK_7, VK_8, VK_9, VK_A,
@@ -869,11 +1037,7 @@ mod test {
         ];
 
         for key in known_ordinary_keys {
-            assert_eq!(
-                false,
-                super::Enigo::is_extended_key(key),
-                "Failed for {key:#?}"
-            )
+            assert!(!super::Enigo::is_extended_key(key), "Failed for {key:#?}");
         }
     }
 }

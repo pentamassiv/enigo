@@ -56,7 +56,7 @@ fn integration_browser_win_rel_mouse_move() {
 
     for acceleration_level in 1..2 {
         for threshold1 in 6..7 {
-            for threshold2 in 10..11 {
+            for threshold2 in 20..21 {
                 enigo::set_mouse_thresholds_and_acceleration(
                     threshold1,
                     threshold2,

@@ -46,26 +46,44 @@ fn integration_browser_events() {
 // Windows if the setting windows_subject_to_mouse_speed_and_acceleration_level
 // is true
 fn integration_browser_win_rel_mouse_move() {
-    let mut enigo = Enigo::new(&Settings::default());
-    let test_cases = vec![
-        ((100, 100), Abs),
-        ((0, 0), Rel),
-        ((-0, 0), Rel),
-        ((0, -0), Rel),
-        ((-0, -0), Rel),
-        ((1, 0), Rel),
-        ((0, 1), Rel),
-        ((-1, -1), Rel),
-        ((4, 6), Rel),
-        ((-42, 63), Rel),
-        ((12, -20), Rel),
-        ((-43, -1), Rel),
-        ((200, 200), Rel),
-        ((-200, 200), Rel),
-        ((200, -200), Rel),
-        ((-200, -200), Rel),
-    ];
-    for ((x, y), coord) in test_cases {
-        enigo.move_mouse(x, y, coord).unwrap();
+    let mut enigo = enigo::Enigo::new(&Settings {
+        windows_subject_to_mouse_speed_and_acceleration_level: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    enigo.move_mouse(0, 0, enigo::Coordinate::Abs).unwrap();
+
+    for acceleration_level in 1..2 {
+        for threshold1 in 6..7 {
+            for threshold2 in 10..11 {
+                enigo::set_mouse_thresholds_and_acceleration(
+                    threshold1,
+                    threshold2,
+                    acceleration_level,
+                )
+                .unwrap();
+                for &mouse_speed in [1, 10, 20].iter() {
+                    enigo::set_mouse_speed(mouse_speed).unwrap();
+                    for x in 0..30 {
+                        for y in 0..30 {
+                            enigo.move_mouse(x, y, enigo::Coordinate::Rel).unwrap();
+                            let params_actual =
+                                enigo::get_mouse_thresholds_and_acceleration().unwrap();
+                            let mouse_speed_actual = enigo::get_mouse_speed().unwrap();
+                            assert_eq!(params_actual, (threshold1, threshold2, acceleration_level));
+                            assert_eq!(mouse_speed_actual, mouse_speed);
+                            println!(
+                                "({threshold1}, {threshold2}, {acceleration_level}, {mouse_speed}, ({x}, {y}), {:?}), ",
+                                enigo.location().unwrap()
+                            );
+
+                            enigo.move_mouse(0, 0, enigo::Coordinate::Abs).unwrap();
+                        }
+                    }
+                }
+            }
+        }
     }
+    panic!();
 }

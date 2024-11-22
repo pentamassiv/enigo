@@ -570,18 +570,24 @@ pub fn get_mouse_thresholds_and_acceleration() -> Option<(i32, i32, i32)> {
 /// However on my system I am unable to set it to 2
 ///
 /// The default values on my system were (6, 10, 1)
-#[must_use]
+///
+/// # Errors
+/// Returns an error if the OS was unable to set the value or if the parameters
+/// were invalid
 pub fn set_mouse_thresholds_and_acceleration(
     threshold1: i32,
     threshold2: i32,
     acceleration_level: i32,
-) -> Result<(), ()> {
+) -> Result<(), std::io::Error> {
     use windows::Win32::UI::WindowsAndMessaging::{
         SystemParametersInfoW, SPIF_SENDCHANGE, SPI_SETMOUSE,
     };
 
     if !(acceleration_level == 0 || acceleration_level == 1 || acceleration_level == 2) {
-        return Err(());
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid acceleration level",
+        ));
     }
 
     let mut mouse_params = [threshold1, threshold2, acceleration_level];
@@ -598,7 +604,7 @@ pub fn set_mouse_thresholds_and_acceleration(
             error!("unable to set the mouse params");
             let last_err = std::io::Error::last_os_error();
             error!("{last_err}");
-            return Err(());
+            return Err(last_err);
         }
     }
     // Attempting to set the acceleration level to 2 will just set it to 1 on my
@@ -609,17 +615,20 @@ pub fn set_mouse_thresholds_and_acceleration(
     {
         error!("Setting the acceleration level to 2 failed");
         error!("{:?}", get_mouse_thresholds_and_acceleration());
-        return Err(());
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid acceleration level",
+        ));
     }
     Ok(())
 }
 
-/// Returns the currently set scaling factor "mouse_speed". This is not the
+/// Returns the currently set scaling factor "`mouse_speed`". This is not the
 /// actual speed of the mouse but a setting.
 ///
 /// Default value of the mouse speed is 10
 /// The returned value ranges between 1 (slowest) and 20 (fastest)
-/// (Source: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa)
+/// (Source: <https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa>)
 // This is needed to calculate the location after a relative mouse move
 #[must_use]
 pub fn get_mouse_speed() -> Option<i32> {
@@ -649,28 +658,34 @@ pub fn get_mouse_speed() -> Option<i32> {
     Some(mouse_speed)
 }
 
-/// Sets the scaling factor "mouse_speed". This is not the
+/// Sets the scaling factor "`mouse_speed`". This is not the
 /// actual speed of the mouse but a setting.
-/// Must be between 1 (slowest) and 20 (fastest) (1 <= mouse_speed <= 20)
+/// Must be between 1 (slowest) and 20 (fastest) (1 <= `mouse_speed` <= 20)
 ///
 /// Default value of the mouse speed is 10
-/// (Source: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa)
-#[must_use]
-pub fn set_mouse_speed(mouse_speed: i32) -> Result<(), ()> {
+/// (Source: <https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa>)
+///
+/// # Errors
+/// Returns an error if the OS was unable to set the value or if the parameters
+/// were invalid
+pub fn set_mouse_speed(mouse_speed: i32) -> Result<(), std::io::Error> {
     use windows::Win32::UI::WindowsAndMessaging::{
         SystemParametersInfoW, SPIF_SENDCHANGE, SPIF_UPDATEINIFILE, SPI_SETMOUSESPEED,
     };
 
-    if mouse_speed < 1 || mouse_speed > 20 {
+    if !(1..=20).contains(&mouse_speed) {
         error!("Not a valid mouse speed");
-        return Err(());
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid mouse speed",
+        ));
     }
 
     unsafe {
         if SystemParametersInfoW(
             SPI_SETMOUSESPEED,
             0, // Not used
-            Some(mouse_speed as *mut usize as *mut _),
+            Some((mouse_speed as *mut usize).cast()),
             SPIF_UPDATEINIFILE | SPIF_SENDCHANGE, /* Broadcasts the WM_SETTINGCHANGE message
                                                    * after updating the user
                                                    * profile, update Win.ini */
@@ -683,7 +698,7 @@ pub fn set_mouse_speed(mouse_speed: i32) -> Result<(), ()> {
             // If the output was "The operation completed successfully. (os error 0)", then
             // the problem might be that the value to set the system parameter to was not
             // valid
-            return Err(());
+            return Err(last_err);
         }
     }
     Ok(())

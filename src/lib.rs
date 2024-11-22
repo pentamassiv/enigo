@@ -74,9 +74,10 @@ mod platform;
 pub use platform::Enigo;
 
 #[cfg(target_os = "windows")]
-pub use platform::calc_rel_mouse_location;
-#[cfg(target_os = "windows")]
-pub use platform::EXT;
+pub use platform::{
+    get_mouse_speed, get_mouse_thresholds_and_acceleration, set_mouse_speed,
+    set_mouse_thresholds_and_acceleration, EXT,
+};
 
 mod keycodes;
 /// Contains the available keycodes
@@ -487,6 +488,70 @@ impl Default for Settings {
             windows_subject_to_mouse_speed_and_acceleration_level: false,
         }
     }
+}
+
+/// IMPORTANT: This function does NOT simulate a relative mouse movement.
+///
+/// Windows: If `windows_subject_to_mouse_speed_and_acceleration_level` is set
+/// to `false`, relative mouse movement is influenced by the system's mouse
+/// speed and acceleration settings. This function calculates the new location
+/// based on the relative movement but does not guarantee the exact future
+/// location. It is intended to estimate the expected location and is useful for
+/// testing relative mouse movement.
+//
+// Quote from documentation (http://web.archive.org/web/20241118235853/https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-mouse_event):
+// Relative mouse motion is subject to the settings for mouse speed and
+// acceleration level. An end user sets these values using the Mouse application
+// in Control Panel. An application obtains and sets these values with the
+// SystemParametersInfo function.
+//
+// The system applies two tests to the specified relative mouse motion when
+// applying acceleration. If the specified distance along either the x or y axis
+// is greater than the first mouse threshold value, and the mouse acceleration
+// level is not zero, the operating system doubles the distance. If the
+// specified distance along either the x- or y-axis is greater than the second
+// mouse threshold value, and the mouse acceleration level is equal to two, the
+// operating system doubles the distance that resulted from applying the first
+// threshold test. It is thus possible for the operating system to multiply
+// relatively-specified mouse motion along the x- or y-axis by up to four times.
+//
+// Once acceleration has been applied, the system scales the resultant value by
+// the desired mouse speed. Mouse speed can range from 1 (slowest) to 20
+// (fastest) and represents how much the pointer moves based on the distance the
+// mouse moves. The default value is 10, which results in no additional
+// modification to the mouse motion.
+//
+// TODO: Improve the calculation of the new mouse location so that we can
+// predict it exeactly. Right now there seem to be rounding errors and the
+// location sometimes is off by 1
+#[must_use]
+pub fn win_future_rel_mouse_location(
+    x: i32,
+    y: i32,
+    threshold1: i32,
+    threshold2: i32,
+    acceleration_level: i32,
+    mouse_speed: i32,
+) -> (i32, i32) {
+    let mouse_speed = mouse_speed as f64;
+
+    let mut multiplier = 1;
+    if acceleration_level != 0 && (x.abs() > threshold1 || y.abs() > threshold1) {
+        multiplier = 2;
+    }
+    if acceleration_level == 2 && (x.abs() > threshold2 || y.abs() > threshold2) {
+        multiplier *= 2;
+    }
+    debug!("multiplier: {multiplier}");
+
+    let accelerated_x = (multiplier * x) as f64;
+    let accelerated_y = (multiplier * y) as f64;
+    debug!("accelerated_x: {accelerated_x}, accelerated_y: {accelerated_y}");
+
+    let scaled_x = (accelerated_x * (mouse_speed / 10.0)).round() as i32;
+    let scaled_y = (accelerated_y * (mouse_speed / 10.0)).round() as i32;
+
+    (scaled_x, scaled_y)
 }
 
 #[cfg(test)]

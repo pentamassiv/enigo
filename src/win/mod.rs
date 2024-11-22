@@ -1,2 +1,5 @@
 mod win_impl;
-pub use win_impl::{calc_rel_mouse_location, Enigo, EXT};
+pub use win_impl::{
+    get_mouse_speed, get_mouse_thresholds_and_acceleration, set_mouse_speed,
+    set_mouse_thresholds_and_acceleration, Enigo, EXT,
+};

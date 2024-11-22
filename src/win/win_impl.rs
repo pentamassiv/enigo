@@ -531,42 +531,16 @@ impl Enigo {
     }
 }
 
-/// Relative mouse motion is subject to the settings for mouse speed and
-/// acceleration level. This function calculates the new location
-//
-// Quote from documentation (http://web.archive.org/web/20241118235853/https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-mouse_event):
-// Relative mouse motion is subject to the settings for mouse speed and
-// acceleration level. An end user sets these values using the Mouse application
-// in Control Panel. An application obtains and sets these values with the
-// SystemParametersInfo function.
-//
-// The system applies two tests to the specified relative mouse motion when
-// applying acceleration. If the specified distance along either the x or y axis
-// is greater than the first mouse threshold value, and the mouse acceleration
-// level is not zero, the operating system doubles the distance. If the
-// specified distance along either the x- or y-axis is greater than the second
-// mouse threshold value, and the mouse acceleration level is equal to two, the
-// operating system doubles the distance that resulted from applying the first
-// threshold test. It is thus possible for the operating system to multiply
-// relatively-specified mouse motion along the x- or y-axis by up to four times.
-//
-// Once acceleration has been applied, the system scales the resultant value by
-// the desired mouse speed. Mouse speed can range from 1 (slowest) to 20
-// (fastest) and represents how much the pointer moves based on the distance the
-// mouse moves. The default value is 10, which results in no additional
-// modification to the mouse motion.
-//
-// TODO: Improve the calculation of the new mouse location so that we can
-// predict it exeactly. Right now there seem to be rounding errors and the
-// location sometimes is off by 1
-#[cfg(target_os = "windows")]
+/// Returns the currenlty set threshold1, threshold2 and acceleration level of
+/// the mouse
+///
+/// The default values on my system were (6, 10, 1)
+// This is needed to calculate the location after a relative mouse move
 #[must_use]
-pub fn calc_rel_mouse_location(x: i32, y: i32) -> (i32, i32) {
+pub fn get_mouse_thresholds_and_acceleration() -> Option<(i32, i32, i32)> {
     use windows::Win32::UI::WindowsAndMessaging::{
-        SystemParametersInfoW, SPI_GETMOUSE, SPI_GETMOUSESPEED, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+        SystemParametersInfoW, SPI_GETMOUSE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
     };
-    debug!("rel_move: ({x}, {y})");
-
     // Retrieve mouse acceleration thresholds and level
     let mut mouse_params = [0i32; 3];
     unsafe {
@@ -582,13 +556,76 @@ pub fn calc_rel_mouse_location(x: i32, y: i32) -> (i32, i32) {
             error!("unable to get the mouse params");
             let last_err = std::io::Error::last_os_error();
             error!("{last_err}");
-            mouse_params = [6, 10, 1]; // Default values taken from my system
-            error!("assumed default value for mouse_params: {mouse_params:?}");
+            return None;
         }
     }
-
+    debug!("mouse_params: {mouse_params:?}");
     let [threshold1, threshold2, acceleration_level] = mouse_params;
-    debug!("threshold1: {threshold1}, threshold2: {threshold2}, acceleration_level:{acceleration_level}");
+    Some((threshold1, threshold2, acceleration_level))
+}
+
+/// Set the threshold1, threshold2 and acceleration level of
+/// the mouse
+/// The documentation says that the acceleration level can be 0, 1 or 2
+/// However on my system I am unable to set it to 2
+///
+/// The default values on my system were (6, 10, 1)
+#[must_use]
+pub fn set_mouse_thresholds_and_acceleration(
+    threshold1: i32,
+    threshold2: i32,
+    acceleration_level: i32,
+) -> Result<(), ()> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPIF_SENDCHANGE, SPI_SETMOUSE,
+    };
+
+    if !(acceleration_level == 0 || acceleration_level == 1 || acceleration_level == 2) {
+        return Err(());
+    }
+
+    let mut mouse_params = [threshold1, threshold2, acceleration_level];
+    unsafe {
+        if SystemParametersInfoW(
+            SPI_SETMOUSE,
+            0, // Not used
+            Some(mouse_params.as_mut_ptr().cast()),
+            SPIF_SENDCHANGE, /* Broadcasts the WM_SETTINGCHANGE message after updating the user
+                              * profile, update Win.ini */
+        )
+        .is_err()
+        {
+            error!("unable to set the mouse params");
+            let last_err = std::io::Error::last_os_error();
+            error!("{last_err}");
+            return Err(());
+        }
+    }
+    // Attempting to set the acceleration level to 2 will just set it to 1 on my
+    // system
+    if acceleration_level == 2
+        && Some((threshold1, threshold2, acceleration_level))
+            != get_mouse_thresholds_and_acceleration()
+    {
+        error!("Setting the acceleration level to 2 failed");
+        error!("{:?}", get_mouse_thresholds_and_acceleration());
+        return Err(());
+    }
+    Ok(())
+}
+
+/// Returns the currently set scaling factor "mouse_speed". This is not the
+/// actual speed of the mouse but a setting.
+///
+/// Default value of the mouse speed is 10
+/// The returned value ranges between 1 (slowest) and 20 (fastest)
+/// (Source: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa)
+// This is needed to calculate the location after a relative mouse move
+#[must_use]
+pub fn get_mouse_speed() -> Option<i32> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETMOUSESPEED, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    };
 
     // Retrieve mouse speed
     let mut mouse_speed = 0i32;
@@ -606,29 +643,50 @@ pub fn calc_rel_mouse_location(x: i32, y: i32) -> (i32, i32) {
             error!("unable to get the mouse params");
             let last_err = std::io::Error::last_os_error();
             error!("{last_err}");
-            mouse_speed = 10; // Default value (Source: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa)
-            error!("assumed default value for mouse speed: {mouse_speed}");
+            return None;
         }
     }
-    let mouse_speed = mouse_speed as f64;
+    Some(mouse_speed)
+}
 
-    let mut multiplier = 1;
-    if acceleration_level != 0 && (x.abs() > threshold1 || y.abs() > threshold1) {
-        multiplier = 2;
+/// Sets the scaling factor "mouse_speed". This is not the
+/// actual speed of the mouse but a setting.
+/// Must be between 1 (slowest) and 20 (fastest) (1 <= mouse_speed <= 20)
+///
+/// Default value of the mouse speed is 10
+/// (Source: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa)
+#[must_use]
+pub fn set_mouse_speed(mouse_speed: i32) -> Result<(), ()> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPIF_SENDCHANGE, SPIF_UPDATEINIFILE, SPI_SETMOUSESPEED,
+    };
+
+    if mouse_speed < 1 || mouse_speed > 20 {
+        error!("Not a valid mouse speed");
+        return Err(());
     }
-    if acceleration_level == 2 && (x.abs() > threshold2 || y.abs() > threshold2) {
-        multiplier *= 2;
+
+    unsafe {
+        if SystemParametersInfoW(
+            SPI_SETMOUSESPEED,
+            0, // Not used
+            Some(mouse_speed as *mut usize as *mut _),
+            SPIF_UPDATEINIFILE | SPIF_SENDCHANGE, /* Broadcasts the WM_SETTINGCHANGE message
+                                                   * after updating the user
+                                                   * profile, update Win.ini */
+        )
+        .is_err()
+        {
+            error!("unable to set the mouse params");
+            let last_err = std::io::Error::last_os_error();
+            error!("{last_err}");
+            // If the output was "The operation completed successfully. (os error 0)", then
+            // the problem might be that the value to set the system parameter to was not
+            // valid
+            return Err(());
+        }
     }
-    debug!("multiplier: {multiplier}");
-
-    let accelerated_x = (multiplier * x) as f64;
-    let accelerated_y = (multiplier * y) as f64;
-    debug!("accelerated_x: {accelerated_x}, accelerated_y: {accelerated_y}");
-
-    let scaled_x = (accelerated_x * (mouse_speed / 10.0)).round() as i32;
-    let scaled_y = (accelerated_y * (mouse_speed / 10.0)).round() as i32;
-
-    (scaled_x, scaled_y)
+    Ok(())
 }
 
 impl Drop for Enigo {
@@ -695,7 +753,17 @@ mod test {
                     epsilon = 0;
                 }
                 Rel => {
-                    let calc_rel_move = super::calc_rel_mouse_location(x, y);
+                    let (threshold1, threshold2, acceleration_level) =
+                        super::get_mouse_thresholds_and_acceleration().unwrap_or((6, 10, 1));
+                    let mouse_speed = super::get_mouse_speed().unwrap_or(10);
+                    let calc_rel_move = crate::win_future_rel_mouse_location(
+                        x,
+                        y,
+                        threshold1,
+                        threshold2,
+                        acceleration_level,
+                        mouse_speed,
+                    );
                     expected_location.0 += calc_rel_move.0;
                     expected_location.1 += calc_rel_move.1;
                     epsilon = 1;
@@ -722,6 +790,157 @@ mod test {
             );
             // Correct the coordinate
             expected_location = actual_location;
+        }
+    }
+
+    #[test]
+    fn unit_set_mouse_thresholds_and_acceleration() {
+        use super::{get_mouse_thresholds_and_acceleration, set_mouse_thresholds_and_acceleration};
+
+        // TODO: Test behavior when setting the acceleration level to 2
+
+        let valid_acceleration_levels = vec![0, 1];
+        let valid_thresholds = vec![
+            (6, 10),
+            (-1, 0),
+            (0, -1),
+            (-1, -1),
+            (-1000, -1000),
+            (i32::MIN, 0),
+            (0, i32::MIN),
+            (i32::MIN, i32::MIN),
+            (100, 1),
+            (1, 100),
+            (1, 100),
+            (1, 10000),
+            (1000000, 10000),
+            (453, 5673),
+            (-4532, 856),
+            (436, -5783),
+            (994974, 0),
+        ];
+
+        let invalid_test_cases = vec![
+            (0, 0, i32::MIN), // Negative acceleration level
+            (0, 0, -1000),    // Negative acceleration level
+            (0, 0, -1),       // Negative acceleration level
+            (0, 0, -1),       // acceleration level > 2
+            (0, 0, 3),        // acceleration level > 2
+            (0, 0, 4),        // acceleration level > 2
+            (0, 0, 10),       // acceleration level > 2
+            (0, 0, 5435674),  // acceleration level > 2
+            (0, 0, i32::MAX), // acceleration level > 2
+            (0, 0, i32::MIN), // Negative acceleration level
+            (6, 10, -1000),   // Negative acceleration level
+            (6, 10, -1),      // Negative acceleration level
+            (6, 10, -1),      // acceleration level > 2
+            (6, 10, 3),       // acceleration level > 2
+            (6, 10, 4),       // acceleration level > 2
+            (6, 10, 10),      // acceleration level > 2
+            (6, 10, 5435674), // acceleration level > 2
+        ];
+
+        // Store current setting
+        let (old_threshold1, old_threshold2, old_acceleration_level) =
+            get_mouse_thresholds_and_acceleration().unwrap();
+        println!("old_threshold1: {old_threshold1}");
+        println!("old_threshold2: {old_threshold2}");
+        println!("old_acceleration_level: {old_acceleration_level}");
+        println!();
+        println!();
+
+        for valid_acceleration_level in valid_acceleration_levels {
+            for (valid_threshold1, valid_threshold2) in &valid_thresholds {
+                println!("old_threshold1: {valid_threshold1}");
+                println!("old_threshold2: {valid_threshold2}");
+                println!("old_acceleration_level: {valid_acceleration_level}");
+                println!();
+                set_mouse_thresholds_and_acceleration(
+                    *valid_threshold1,
+                    *valid_threshold2,
+                    valid_acceleration_level,
+                )
+                .unwrap();
+                let actual_params = get_mouse_thresholds_and_acceleration().unwrap();
+                assert_eq!(
+                    (
+                        *valid_threshold1,
+                        *valid_threshold2,
+                        valid_acceleration_level
+                    ),
+                    actual_params
+                );
+            }
+        }
+
+        // Restore old setting
+        set_mouse_thresholds_and_acceleration(
+            old_threshold1,
+            old_threshold2,
+            old_acceleration_level,
+        )
+        .unwrap();
+
+        for (invalid_threshold1, invalid_threshold2, invalid_acceleration_level) in
+            invalid_test_cases
+        {
+            println!("old_threshold1: {invalid_threshold1}");
+            println!("old_threshold2: {invalid_threshold2}");
+            println!("old_acceleration_level: {invalid_acceleration_level}");
+            println!();
+            if set_mouse_thresholds_and_acceleration(
+                invalid_threshold1,
+                invalid_threshold2,
+                invalid_acceleration_level,
+            )
+            .is_ok()
+            {
+                // Restore old setting ()
+                set_mouse_thresholds_and_acceleration(
+                    old_threshold1,
+                    old_threshold2,
+                    old_acceleration_level,
+                )
+                .unwrap();
+                panic!("Successfully set an invalid mouse speed");
+            };
+            let actual_params = get_mouse_thresholds_and_acceleration().unwrap();
+            assert_eq!(
+                (old_threshold1, old_threshold2, old_acceleration_level),
+                actual_params
+            );
+        }
+    }
+
+    #[test]
+    fn unit_get_set_mouse_speed() {
+        use super::{get_mouse_speed, set_mouse_speed};
+
+        let valid_speeds = 1..=20;
+        let invalid_speeds = vec![i32::MIN, -1000, -1, 0, 21, 22, 1000, i32::MAX];
+
+        // Store current setting
+        let old_mouse_speed = get_mouse_speed().unwrap();
+        println!("old_mouse_speed: {old_mouse_speed}");
+
+        for valid_mouse_speed in valid_speeds {
+            println!("valid mouse speed: {valid_mouse_speed}");
+            set_mouse_speed(valid_mouse_speed).unwrap();
+            let actual_mouse_speed = get_mouse_speed().unwrap();
+            assert_eq!(valid_mouse_speed, actual_mouse_speed);
+        }
+        // Restore old setting
+        set_mouse_speed(old_mouse_speed).unwrap();
+
+        for invalid_mouse_speed in invalid_speeds {
+            println!("invalid mouse speed: {invalid_mouse_speed}");
+            if set_mouse_speed(invalid_mouse_speed).is_ok() {
+                // Restore old setting ()
+                set_mouse_speed(old_mouse_speed).unwrap();
+                panic!("Successfully set an invalid mouse speed");
+            };
+            let actual_mouse_speed = get_mouse_speed().unwrap();
+            assert_eq!(old_mouse_speed, actual_mouse_speed);
         }
     }
 

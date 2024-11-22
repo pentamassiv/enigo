@@ -3,7 +3,8 @@
 - Rust: MSRV is 1.82
 
 ## Added
-- win: The function `calc_rel_mouse_location` can calculate the next mouse position before a relative mouse move happens
+- all: The function `win_future_rel_mouse_location` can calculate the next mouse position on a Windows OS, before a relative mouse move happens that is subject to mouse speed and acceleration level
+- win: Added functions to get and set the mouse speed and acceleration level (`get_mouse_thresholds_and_acceleration`, `set_mouse_thresholds_and_acceleration`, `get_mouse_speed`, `set_mouse_speed`)
 
 ## Removed
 

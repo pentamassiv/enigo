@@ -211,7 +211,17 @@ impl Mouse for EnigoTest {
         #[cfg(target_os = "windows")]
         {
             if self.win_mouse_acceleration {
-                let (x, y) = enigo::calc_rel_mouse_location(x, y);
+                let (threshold1, threshold2, acceleration_level) =
+                    enigo::get_mouse_thresholds_and_acceleration().unwrap_or((6, 10, 1));
+                let mouse_speed = enigo::get_mouse_speed().unwrap_or(10);
+                let (x, y) = enigo::win_future_rel_mouse_location(
+                    x,
+                    y,
+                    threshold1,
+                    threshold2,
+                    acceleration_level,
+                    mouse_speed,
+                );
                 // TODO: Improve the calculation of the new mouse location so that we can
                 // predict it exeactly
                 assert!(i32::abs(x - mouse_position.0) <= 1);

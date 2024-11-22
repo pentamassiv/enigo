@@ -279,3 +279,24 @@ fn unit_mouse_drag() {
     thread::sleep(delay);
     enigo.button(Button::Left, Release).unwrap();
 }
+
+#[test]
+fn unit_win_future_rel_mouse_location() {
+    let test_parameters = vec![(6, 10, 1, 10)];
+    let test_cases = vec![(20, 20, 0, 0)];
+
+    for (threshold1, threshold2, acceleration_level, mouse_speed) in test_parameters {
+        for (move_x, move_y, location_x, location_y) in &test_cases {
+            let (x, y) = crate::win_future_rel_mouse_location(
+                *move_x,
+                *move_y,
+                threshold1,
+                threshold2,
+                acceleration_level,
+                mouse_speed,
+            );
+            assert_eq!(x, *location_x);
+            assert_eq!(y, *location_y);
+        }
+    }
+}

@@ -3,6 +3,7 @@
 - Rust: MSRV is 1.82
 
 ## Added
+- win: Added functions to get and set the mouse speed and acceleration level (`get_mouse_thresholds_and_acceleration`, `set_mouse_thresholds_and_acceleration`, `get_mouse_speed`, `set_mouse_speed`, `mouse_curve`, `set_mouse_curve`)
 
 ## Removed
 

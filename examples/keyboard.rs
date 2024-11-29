@@ -19,4 +19,6 @@ fn main() {
     enigo.key(Key::Control, Press).unwrap();
     enigo.key(Key::Unicode('a'), Click).unwrap();
     enigo.key(Key::Control, Release).unwrap();
+
+    thread::sleep(Duration::from_secs(10));
 }

@@ -71,7 +71,7 @@ impl Con {
             Err(e) => {
                 error!("{:?}", e);
                 return Err(NewConError::EstablishCon(
-                    "failed to connect to wayland. Try setting 'export WAYLAND_DISPLAY=wayland-0': {e}",
+                    "failed to connect to wayland. Try setting 'export WAYLAND_DISPLAY=wayland-0'",
                 ));
             }
         };
@@ -106,14 +106,14 @@ impl Con {
 
         let base_time = Instant::now();
 
-        // All keycodes are unused when initialized
-        let mut unused_keycodes = VecDeque::with_capacity(255 - 8 + 1); // All keycodes are unused when initialized
-        for n in 8..=255 {
-            unused_keycodes.push_back(n as Keycode);
-        }
-
-        let (keysyms_per_keycode, keysyms) = (0, vec![]);
-        let keymap = KeyMap::new(8, 255, unused_keycodes, keysyms_per_keycode, keysyms);
+        let keymap = KeyMap::new(
+            8,
+            255,
+            // All keycodes are unused when initialized
+            (8..=255).collect::<VecDeque<Keycode>>(),
+            0,
+            Vec::new(),
+        );
 
         let mut connection = Self {
             keymap,

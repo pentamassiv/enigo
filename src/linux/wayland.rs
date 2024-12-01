@@ -223,14 +223,23 @@ impl Con {
     /// Sends a modifier event with the updated bitflag of the modifiers to the
     /// compositor
     fn send_modifier_event(&mut self, modifiers: ModifierBitflag) -> InputResult<()> {
+        // Retrieve virtual keyboard or return an error early if None
         let vk = self
             .virtual_keyboard
             .as_ref()
             .ok_or_else(|| InputError::Simulate("no way to enter key"))?;
+
+        // Check if virtual keyboard is still alive
         is_alive(vk)?;
+
+        // Log the modifier event
         trace!("vk.modifiers({modifiers}, 0, 0, 0)");
+
+        // Send the modifier event
         vk.modifiers(modifiers, 0, 0, 0);
+
         // TODO: Change to flush()
+        // Perform a roundtrip to send the event
         self.event_queue
             .roundtrip(&mut self.state)
             .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
@@ -247,33 +256,41 @@ impl Con {
         let vk = self
             .virtual_keyboard
             .as_ref()
-            .ok_or_else(|| InputError::Simulate("no way to enter key"))?;
+            .ok_or_else(|| InputError::Simulate("no way to apply keymap"))?;
         is_alive(vk)?;
-        let Ok(keymap_res) = self.keymap.regenerate() else {
-            return Err(InputError::Mapping(
-                "unable to regenerate keymap".to_string(),
-            ));
+
+        // Regenerate keymap and handle failure
+        let keymap_size = self
+            .keymap
+            .regenerate()
+            .map_err(|_| InputError::Mapping("unable to regenerate keymap".to_string()))?;
+
+        // Early return if the keymap was not changed because we only send an updated
+        // keymap if we had to regenerate it
+        let Some(size) = keymap_size else {
+            return Ok(());
         };
-        // Only send an updated keymap if we had to regenerate it
-        // There should always be a file at this point so unwrapping is fine
-        // here
-        if let Some(keymap_size) = keymap_res {
-            trace!("update wayland keymap");
-            vk.keymap(1, self.keymap.file.as_ref().unwrap().as_fd(), keymap_size);
-            // TODO: Change to flush()
-            self.event_queue
-                .roundtrip(&mut self.state)
-                .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
-        }
-        return Ok(());
+
+        trace!("update wayland keymap");
+
+        let keymap_file = self.keymap.file.as_ref().unwrap(); // Safe here, assuming file is always present
+        vk.keymap(1, keymap_file.as_fd(), size);
+
+        // TODO: Change to flush()
+        self.event_queue
+            .roundtrip(&mut self.state)
+            .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
+
+        Ok(())
     }
 
     fn raw(&mut self, keycode: Keycode, direction: Direction) -> InputResult<()> {
         // Apply the new keymap if there were any changes
         self.apply_keymap()?;
-        self.send_key_event(keycode, direction)?;
-        // Let the keymap know that the key was held/no longer held
+
+        // Send the key event and update keymap state
         // This is important to avoid unmapping held keys
+        self.send_key_event(keycode, direction)?;
         self.keymap.key(keycode, direction);
 
         Ok(())
@@ -281,16 +298,12 @@ impl Con {
 
     /// Flush the Wayland queue
     fn flush(&self) -> InputResult<()> {
-        match self.event_queue.flush() {
-            Ok(()) => {
-                trace!("flushed event queue");
-                Ok(())
-            }
-            Err(e) => {
-                error!("{:?}", e);
-                Err(InputError::Simulate("could not flush wayland queue"))
-            }
-        }
+        self.event_queue.flush().map_err(|e| {
+            error!("{:?}", e);
+            InputError::Simulate("could not flush Wayland queue")
+        })?;
+        trace!("flushed event queue");
+        Ok(())
     }
 }
 
@@ -302,21 +315,14 @@ impl Bind<Keycode> for Con {
 impl Drop for Con {
     // Destroy the Wayland objects we created
     fn drop(&mut self) {
-        if let Some(vk) = &self.virtual_keyboard {
-            vk.destroy();
-        }
-        if let Some(im) = &self.input_method {
-            im.destroy();
-        }
-        if let Some(im_mgr) = self.state.im_manager.as_ref() {
-            im_mgr.destroy();
-        }
-        if let Some(vp) = &self.virtual_pointer {
-            vp.destroy();
-        }
-        if let Some(pointer_mgr) = self.state.pointer_manager.as_ref() {
-            pointer_mgr.destroy();
-        }
+        self.virtual_keyboard.take().map(|vk| vk.destroy());
+        self.input_method.take().map(|im| im.destroy());
+        self.state.im_manager.take().map(|im_mgr| im_mgr.destroy());
+        self.virtual_pointer.take().map(|vp| vp.destroy());
+        self.state
+            .pointer_manager
+            .take()
+            .map(|pointer_mgr| pointer_mgr.destroy());
 
         if self.flush().is_err() {
             error!("could not flush wayland queue");
@@ -355,9 +361,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
         // When receiving events from the wl_registry, we are only interested in the
         // `global` event, which signals a new available global.
         if let wl_registry::Event::Global {
-            name,
-            interface,
-            version: _,
+            name, interface, ..
         } = event
         {
             match &interface[..] {
@@ -566,40 +570,47 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
 
 impl Keyboard for Con {
     fn fast_text(&mut self, text: &str) -> InputResult<Option<()>> {
-        if let Some(im) = self.input_method.as_mut() {
-            is_alive(im)?;
-            trace!("fast text input with imput_method protocol");
-            im.commit_string(text.to_string());
-            im.commit(self.state.im_serial.0);
-            // TODO: Change to flush()
-            self.event_queue
-                .roundtrip(&mut self.state)
-                .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
+        let im = match self.input_method.as_mut() {
+            Some(im) => im,
+            None => return Ok(None),
+        };
 
-            return Ok(Some(()));
-        }
-        Ok(None)
+        is_alive(im)?;
+        trace!("fast text input with imput_method protocol");
+        im.commit_string(text.to_string());
+        im.commit(self.state.im_serial.0);
+
+        // TODO: Change to flush()
+        self.event_queue
+            .roundtrip(&mut self.state)
+            .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
+
+        return Ok(Some(()));
     }
 
     fn key(&mut self, key: Key, direction: Direction) -> InputResult<()> {
+        let modifier = match Modifier::try_from(key) {
+            Ok(modifier) => modifier,
+            Err(_) => {
+                let keycode = self.keymap.key_to_keycode(&(), key)?;
+                self.raw(keycode, direction)?;
+                return Ok(());
+            }
+        };
+
         // Send the events to the compositor
-        if let Ok(modifier) = Modifier::try_from(key) {
-            trace!("it is a modifier: {modifier:?}");
-            if direction == Direction::Click || direction == Direction::Press {
-                let modifiers = self
-                    .keymap
-                    .enter_modifier(modifier.bitflag(), Direction::Press);
-                self.send_modifier_event(modifiers)?;
-            }
-            if direction == Direction::Click || direction == Direction::Release {
-                let modifiers = self
-                    .keymap
-                    .enter_modifier(modifier.bitflag(), Direction::Release);
-                self.send_modifier_event(modifiers)?;
-            }
-        } else {
-            let keycode = self.keymap.key_to_keycode(&(), key)?;
-            self.raw(keycode, direction)?;
+        trace!("it is a modifier: {modifier:?}");
+        if direction == Direction::Click || direction == Direction::Press {
+            let modifiers = self
+                .keymap
+                .enter_modifier(modifier.bitflag(), Direction::Press);
+            self.send_modifier_event(modifiers)?;
+        }
+        if direction == Direction::Click || direction == Direction::Release {
+            let modifiers = self
+                .keymap
+                .enter_modifier(modifier.bitflag(), Direction::Release);
+            self.send_modifier_event(modifiers)?;
         }
 
         Ok(())
@@ -618,15 +629,14 @@ impl Mouse for Con {
 
         // Do nothing if one of the mouse scroll buttons was released
         // Releasing one of the scroll mouse buttons has no effect
-        if direction == Direction::Release {
-            match button {
-                Button::Left | Button::Right | Button::Back | Button::Forward | Button::Middle => {}
-                Button::ScrollDown
-                | Button::ScrollUp
-                | Button::ScrollRight
-                | Button::ScrollLeft => return Ok(()),
-            }
-        };
+        if direction == Direction::Release
+            && matches!(
+                button,
+                Button::ScrollDown | Button::ScrollUp | Button::ScrollRight | Button::ScrollLeft
+            )
+        {
+            return Ok(());
+        }
 
         let button = match button {
             // Taken from /linux/input-event-codes.h
@@ -674,16 +684,13 @@ impl Mouse for Con {
                 vp.motion(time, x as f64, y as f64);
             }
             Coordinate::Abs => {
-                let Ok(x) = x.try_into() else {
-                    return Err(InputError::InvalidInput(
-                        "the absolute coordinates cannot be negative",
-                    ));
-                };
-                let Ok(y) = y.try_into() else {
-                    return Err(InputError::InvalidInput(
-                        "the absolute coordinates cannot be negative",
-                    ));
-                };
+                let x: u32 = x.try_into().map_err(|_| {
+                    InputError::InvalidInput("the absolute coordinates cannot be negative")
+                })?;
+                let y: u32 = y.try_into().map_err(|_| {
+                    InputError::InvalidInput("the absolute coordinates cannot be negative")
+                })?;
+
                 trace!("vp.motion_absolute({time}, {x}, {y}, u32::MAX, u32::MAX)");
                 vp.motion_absolute(
                     time,
@@ -707,7 +714,7 @@ impl Mouse for Con {
         let vp = self
             .virtual_pointer
             .as_ref()
-            .ok_or_else(|| InputError::Simulate("no way to move the mouse"))?;
+            .ok_or_else(|| InputError::Simulate("no way to scroll"))?;
 
         // TODO: Check what the value of length should be
         // TODO: Check if it would be better to use .axis_discrete here

@@ -102,10 +102,6 @@ impl Con {
             .roundtrip(&mut state)
             .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
 
-        let (virtual_keyboard, input_method, virtual_pointer) = (None, None, None);
-
-        let base_time = Instant::now();
-
         let keymap = KeyMap::new(
             8,
             255,
@@ -119,17 +115,18 @@ impl Con {
             keymap,
             event_queue,
             state,
-            virtual_keyboard,
-            input_method,
-            virtual_pointer,
-            base_time,
+            virtual_keyboard: None,
+            input_method: None,
+            virtual_pointer: None,
+            base_time: Instant::now(),
         };
 
         connection.init_protocols()?;
 
-        if connection.apply_keymap().is_err() {
-            return Err(NewConError::EstablishCon("unable to apply the keymap"));
-        };
+        connection
+            .apply_keymap()
+            .map_err(|_| NewConError::EstablishCon("Unable to apply the keymap"))?;
+
         Ok(connection)
     }
 

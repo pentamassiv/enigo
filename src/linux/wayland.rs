@@ -310,9 +310,16 @@ impl Drop for Con {
         if let Some(im) = &self.input_method {
             im.destroy();
         }
+        if let Some(im_mgr) = self.state.im_manager.as_ref() {
+            im_mgr.destroy();
+        }
         if let Some(vp) = &self.virtual_pointer {
             vp.destroy();
         }
+        if let Some(pointer_mgr) = self.state.pointer_manager.as_ref() {
+            pointer_mgr.destroy();
+        }
+
         if self.flush().is_err() {
             error!("could not flush wayland queue");
         }
@@ -556,18 +563,6 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
         _qh: &QueueHandle<Self>,
     ) {
         warn!("Got a virtual keyboard event {:?}", event);
-    }
-}
-
-impl Drop for WaylandState {
-    // Destroy the manager for the protocols we used
-    fn drop(&mut self) {
-        if let Some(im_mgr) = self.im_manager.as_ref() {
-            im_mgr.destroy();
-        }
-        if let Some(pointer_mgr) = self.pointer_manager.as_ref() {
-            pointer_mgr.destroy();
-        }
     }
 }
 

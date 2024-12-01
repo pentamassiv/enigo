@@ -157,9 +157,10 @@ impl Con {
         // Try to authenticate for the KDE Fake Input protocol
         // TODO: Get this protocol to work
         if let Some(kde_input) = &self.state.kde_input {
-            let application = "enigo".to_string();
-            let reason = "enter keycodes or move the mouse".to_string();
-            kde_input.authenticate(application, reason);
+            kde_input.authenticate(
+                "enigo".to_string(),
+                "enter keycodes or move the mouse".to_string(),
+            );
         }
 
         trace!(
@@ -192,47 +193,49 @@ impl Con {
     /// # Errors
     /// TODO
     fn send_key_event(&mut self, keycode: Keycode, direction: Direction) -> InputResult<()> {
-        if let Some(vk) = &self.virtual_keyboard {
-            is_alive(vk)?;
-            let time = self.get_time();
-            let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
+        let vk = self
+            .virtual_keyboard
+            .as_ref()
+            .ok_or_else(|| InputError::Simulate("no way to enter key"))?;
+        is_alive(vk)?;
+        let time = self.get_time();
+        let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
 
-            if direction == Direction::Press || direction == Direction::Click {
-                trace!("vk.key({time}, {keycode}, 1)");
-                vk.key(time, keycode, 1);
-                // TODO: Change to flush()
-                self.event_queue
-                    .roundtrip(&mut self.state)
-                    .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
-            }
-            if direction == Direction::Release || direction == Direction::Click {
-                trace!("vk.key({time}, {keycode}, 0)");
-                vk.key(time, keycode, 0);
-                // TODO: Change to flush()
-                self.event_queue
-                    .roundtrip(&mut self.state)
-                    .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
-            }
-            return Ok(());
+        if direction == Direction::Press || direction == Direction::Click {
+            trace!("vk.key({time}, {keycode}, 1)");
+            vk.key(time, keycode, 1);
+            // TODO: Change to flush()
+            self.event_queue
+                .roundtrip(&mut self.state)
+                .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
         }
-        Err(InputError::Simulate("no way to enter key"))
+        if direction == Direction::Release || direction == Direction::Click {
+            trace!("vk.key({time}, {keycode}, 0)");
+            vk.key(time, keycode, 0);
+            // TODO: Change to flush()
+            self.event_queue
+                .roundtrip(&mut self.state)
+                .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
+        }
+        return Ok(());
     }
 
     /// Sends a modifier event with the updated bitflag of the modifiers to the
     /// compositor
     fn send_modifier_event(&mut self, modifiers: ModifierBitflag) -> InputResult<()> {
-        if let Some(vk) = &self.virtual_keyboard {
-            is_alive(vk)?;
-            trace!("vk.modifiers({modifiers}, 0, 0, 0)");
-            vk.modifiers(modifiers, 0, 0, 0);
-            // TODO: Change to flush()
-            self.event_queue
-                .roundtrip(&mut self.state)
-                .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
+        let vk = self
+            .virtual_keyboard
+            .as_ref()
+            .ok_or_else(|| InputError::Simulate("no way to enter key"))?;
+        is_alive(vk)?;
+        trace!("vk.modifiers({modifiers}, 0, 0, 0)");
+        vk.modifiers(modifiers, 0, 0, 0);
+        // TODO: Change to flush()
+        self.event_queue
+            .roundtrip(&mut self.state)
+            .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
 
-            return Ok(());
-        }
-        Err(InputError::Simulate("no way to enter modifier"))
+        return Ok(());
     }
 
     /// Apply the current keymap
@@ -241,27 +244,28 @@ impl Con {
     /// TODO
     fn apply_keymap(&mut self) -> InputResult<()> {
         trace!("apply_keymap(&mut self)");
-        if let Some(vk) = &self.virtual_keyboard {
-            is_alive(vk)?;
-            let Ok(keymap_res) = self.keymap.regenerate() else {
-                return Err(InputError::Mapping(
-                    "unable to regenerate keymap".to_string(),
-                ));
-            };
-            // Only send an updated keymap if we had to regenerate it
-            // There should always be a file at this point so unwrapping is fine
-            // here
-            if let Some(keymap_size) = keymap_res {
-                trace!("update wayland keymap");
-                vk.keymap(1, self.keymap.file.as_ref().unwrap().as_fd(), keymap_size);
-                // TODO: Change to flush()
-                self.event_queue
-                    .roundtrip(&mut self.state)
-                    .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
-            }
-            return Ok(());
+        let vk = self
+            .virtual_keyboard
+            .as_ref()
+            .ok_or_else(|| InputError::Simulate("no way to enter key"))?;
+        is_alive(vk)?;
+        let Ok(keymap_res) = self.keymap.regenerate() else {
+            return Err(InputError::Mapping(
+                "unable to regenerate keymap".to_string(),
+            ));
+        };
+        // Only send an updated keymap if we had to regenerate it
+        // There should always be a file at this point so unwrapping is fine
+        // here
+        if let Some(keymap_size) = keymap_res {
+            trace!("update wayland keymap");
+            vk.keymap(1, self.keymap.file.as_ref().unwrap().as_fd(), keymap_size);
+            // TODO: Change to flush()
+            self.event_queue
+                .roundtrip(&mut self.state)
+                .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
         }
-        Err(InputError::Simulate("no way to apply keymap"))
+        return Ok(());
     }
 
     fn raw(&mut self, keycode: Keycode, direction: Direction) -> InputResult<()> {
@@ -607,49 +611,48 @@ impl Keyboard for Con {
 }
 impl Mouse for Con {
     fn button(&mut self, button: Button, direction: Direction) -> InputResult<()> {
-        if let Some(vp) = &self.virtual_pointer {
-            // Do nothing if one of the mouse scroll buttons was released
-            // Releasing one of the scroll mouse buttons has no effect
-            if direction == Direction::Release {
-                match button {
-                    Button::Left
-                    | Button::Right
-                    | Button::Back
-                    | Button::Forward
-                    | Button::Middle => {}
-                    Button::ScrollDown
-                    | Button::ScrollUp
-                    | Button::ScrollRight
-                    | Button::ScrollLeft => return Ok(()),
-                }
-            };
+        let vp = self
+            .virtual_pointer
+            .as_ref()
+            .ok_or_else(|| InputError::Simulate("no way to enter button"))?;
 
-            let button = match button {
-                // Taken from /linux/input-event-codes.h
-                Button::Left => 0x110,
-                Button::Right => 0x111,
-                Button::Back => 0x116,
-                Button::Forward => 0x115,
-                Button::Middle => 0x112,
-                Button::ScrollDown => return self.scroll(1, Axis::Vertical),
-                Button::ScrollUp => return self.scroll(-1, Axis::Vertical),
-                Button::ScrollRight => return self.scroll(1, Axis::Horizontal),
-                Button::ScrollLeft => return self.scroll(-1, Axis::Horizontal),
-            };
-
-            if direction == Direction::Press || direction == Direction::Click {
-                let time = self.get_time();
-                trace!("vp.button({time}, {button}, wl_pointer::ButtonState::Pressed)");
-                vp.button(time, button, wl_pointer::ButtonState::Pressed);
-                vp.frame(); // TODO: Check if this is needed
+        // Do nothing if one of the mouse scroll buttons was released
+        // Releasing one of the scroll mouse buttons has no effect
+        if direction == Direction::Release {
+            match button {
+                Button::Left | Button::Right | Button::Back | Button::Forward | Button::Middle => {}
+                Button::ScrollDown
+                | Button::ScrollUp
+                | Button::ScrollRight
+                | Button::ScrollLeft => return Ok(()),
             }
+        };
 
-            if direction == Direction::Release || direction == Direction::Click {
-                let time = self.get_time();
-                trace!("vp.button({time}, {button}, wl_pointer::ButtonState::Released)");
-                vp.button(time, button, wl_pointer::ButtonState::Released);
-                vp.frame(); // TODO: Check if this is needed
-            }
+        let button = match button {
+            // Taken from /linux/input-event-codes.h
+            Button::Left => 0x110,
+            Button::Right => 0x111,
+            Button::Back => 0x116,
+            Button::Forward => 0x115,
+            Button::Middle => 0x112,
+            Button::ScrollDown => return self.scroll(1, Axis::Vertical),
+            Button::ScrollUp => return self.scroll(-1, Axis::Vertical),
+            Button::ScrollRight => return self.scroll(1, Axis::Horizontal),
+            Button::ScrollLeft => return self.scroll(-1, Axis::Horizontal),
+        };
+
+        if direction == Direction::Press || direction == Direction::Click {
+            let time = self.get_time();
+            trace!("vp.button({time}, {button}, wl_pointer::ButtonState::Pressed)");
+            vp.button(time, button, wl_pointer::ButtonState::Pressed);
+            vp.frame(); // TODO: Check if this is needed
+        }
+
+        if direction == Direction::Release || direction == Direction::Click {
+            let time = self.get_time();
+            trace!("vp.button({time}, {button}, wl_pointer::ButtonState::Released)");
+            vp.button(time, button, wl_pointer::ButtonState::Released);
+            vp.frame(); // TODO: Check if this is needed
         }
         // TODO: Change to flush()
         self.event_queue
@@ -659,36 +662,40 @@ impl Mouse for Con {
     }
 
     fn move_mouse(&mut self, x: i32, y: i32, coordinate: Coordinate) -> InputResult<()> {
-        if let Some(vp) = &self.virtual_pointer {
-            let time = self.get_time();
-            match coordinate {
-                Coordinate::Rel => {
-                    trace!("vp.motion({time}, {x}, {y})");
-                    vp.motion(time, x as f64, y as f64);
-                }
-                Coordinate::Abs => {
-                    let Ok(x) = x.try_into() else {
-                        return Err(InputError::InvalidInput(
-                            "the absolute coordinates cannot be negative",
-                        ));
-                    };
-                    let Ok(y) = y.try_into() else {
-                        return Err(InputError::InvalidInput(
-                            "the absolute coordinates cannot be negative",
-                        ));
-                    };
-                    trace!("vp.motion_absolute({time}, {x}, {y}, u32::MAX, u32::MAX)");
-                    vp.motion_absolute(
-                        time,
-                        x,
-                        y,
-                        u32::MAX, // TODO: Check what would be the correct value here
-                        u32::MAX, // TODO: Check what would be the correct value here
-                    );
-                }
+        let vp = self
+            .virtual_pointer
+            .as_ref()
+            .ok_or_else(|| InputError::Simulate("no way to move the mouse"))?;
+
+        let time = self.get_time();
+        match coordinate {
+            Coordinate::Rel => {
+                trace!("vp.motion({time}, {x}, {y})");
+                vp.motion(time, x as f64, y as f64);
             }
-            vp.frame(); // TODO: Check if this is needed
+            Coordinate::Abs => {
+                let Ok(x) = x.try_into() else {
+                    return Err(InputError::InvalidInput(
+                        "the absolute coordinates cannot be negative",
+                    ));
+                };
+                let Ok(y) = y.try_into() else {
+                    return Err(InputError::InvalidInput(
+                        "the absolute coordinates cannot be negative",
+                    ));
+                };
+                trace!("vp.motion_absolute({time}, {x}, {y}, u32::MAX, u32::MAX)");
+                vp.motion_absolute(
+                    time,
+                    x,
+                    y,
+                    u32::MAX, // TODO: Check what would be the correct value here
+                    u32::MAX, // TODO: Check what would be the correct value here
+                );
+            }
         }
+        vp.frame(); // TODO: Check if this is needed
+
         // TODO: Change to flush()
         self.event_queue
             .roundtrip(&mut self.state)
@@ -697,18 +704,22 @@ impl Mouse for Con {
     }
 
     fn scroll(&mut self, length: i32, axis: Axis) -> InputResult<()> {
-        if let Some(vp) = &self.virtual_pointer {
-            // TODO: Check what the value of length should be
-            // TODO: Check if it would be better to use .axis_discrete here
-            let time = self.get_time();
-            let axis = match axis {
-                Axis::Horizontal => wl_pointer::Axis::HorizontalScroll,
-                Axis::Vertical => wl_pointer::Axis::VerticalScroll,
-            };
-            trace!("vp.axis(time, axis, length.into())");
-            vp.axis(time, axis, length.into());
-            vp.frame(); // TODO: Check if this is needed
-        }
+        let vp = self
+            .virtual_pointer
+            .as_ref()
+            .ok_or_else(|| InputError::Simulate("no way to move the mouse"))?;
+
+        // TODO: Check what the value of length should be
+        // TODO: Check if it would be better to use .axis_discrete here
+        let time = self.get_time();
+        let axis = match axis {
+            Axis::Horizontal => wl_pointer::Axis::HorizontalScroll,
+            Axis::Vertical => wl_pointer::Axis::VerticalScroll,
+        };
+        trace!("vp.axis(time, axis, length.into())");
+        vp.axis(time, axis, length.into());
+        vp.frame(); // TODO: Check if this is needed
+
         // TODO: Change to flush()
         self.event_queue
             .roundtrip(&mut self.state)

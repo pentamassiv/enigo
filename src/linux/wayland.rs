@@ -126,7 +126,22 @@ impl Con {
             base_time,
         };
 
+        if connection
+            .event_queue
+            .roundtrip(&mut connection.state)
+            .is_err()
+        {
+            return Err(NewConError::EstablishCon("wayland roundtrip not possible"));
+        }
+
         connection.init_protocols()?;
+        if connection
+            .event_queue
+            .roundtrip(&mut connection.state)
+            .is_err()
+        {
+            return Err(NewConError::EstablishCon("wayland roundtrip not possible"));
+        }
         /*
         if connection.apply_keymap().is_err() {
             return Err(NewConError::EstablishCon("unable to apply the keymap"));

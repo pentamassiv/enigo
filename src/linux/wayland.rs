@@ -297,27 +297,6 @@ impl Bind<Keycode> for Con {
     // On Wayland only the whole keymap can be applied
 }
 
-impl Drop for Con {
-    // Destroy the Wayland objects we created
-    fn drop(&mut self) {
-        if let Some(vk) = &self.virtual_keyboard {
-            vk.destroy();
-        }
-        if let Some((im, _)) = &self.input_method {
-            im.destroy();
-        }
-        if let Some(vp) = &self.virtual_pointer {
-            vp.destroy();
-        }
-        if self.flush().is_err() {
-            error!("could not flush wayland queue");
-        }
-        trace!("wayland objects were destroyed");
-
-        let _ = self.event_queue.roundtrip(&mut self.state);
-    }
-}
-
 /// Stores the manager for the various protocols
 struct WaylandState {
     keyboard_manager: Option<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1>,
@@ -559,18 +538,6 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
         _qh: &QueueHandle<Self>,
     ) {
         warn!("Got a virtual keyboard event {:?}", event);
-    }
-}
-
-impl Drop for WaylandState {
-    // Destroy the manager for the protocols we used
-    fn drop(&mut self) {
-        if let Some(im_mgr) = self.im_manager.as_ref() {
-            im_mgr.destroy();
-        }
-        if let Some(pointer_mgr) = self.pointer_manager.as_ref() {
-            pointer_mgr.destroy();
-        }
     }
 }
 

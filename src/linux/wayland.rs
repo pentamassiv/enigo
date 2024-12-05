@@ -539,6 +539,10 @@ impl Keyboard for Con {
 
         is_alive(im)?;
         trace!("fast text input with imput_method protocol");
+        // Process all previous events so that the serial number is correct
+        self.event_queue
+            .roundtrip(&mut self.state)
+            .map_err(|_| InputError::Simulate("The roundtrip on Wayland failed"))?;
         im.commit_string(text.to_string());
         im.commit(self.state.im_serial.0);
 

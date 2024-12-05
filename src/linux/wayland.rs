@@ -595,6 +595,10 @@ impl Keyboard for Con {
         if let Some((im, serial)) = self.input_method.as_mut() {
             is_alive(im)?;
             trace!("fast text input with imput_method protocol");
+            // Process all previous events to have a correct serial no
+            if self.event_queue.roundtrip(&mut self.state).is_err() {
+                return Err(InputError::Simulate("The roundtrip on Wayland failed"));
+            }
             im.commit_string(text.to_string());
             im.commit(*serial);
             *serial = serial.wrapping_add(1);

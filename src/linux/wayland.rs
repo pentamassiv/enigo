@@ -373,7 +373,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         );
                     state.im_manager = Some(manager);
                 }
-                /*
+
                 "zwp_virtual_keyboard_manager_v1" => {
                     let manager = registry
                         .bind::<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, _, _>(
@@ -404,7 +404,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                             (),
                         );
                     state.kde_input = Some(kde_input);
-                } */
+                }
                 s => {
                     trace!("i: {}", s);
                 }

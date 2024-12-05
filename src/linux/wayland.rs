@@ -18,7 +18,6 @@ use wayland_protocols_misc::{
     zwp_input_method_v2::client::{zwp_input_method_manager_v2, zwp_input_method_v2},
     zwp_virtual_keyboard_v1::client::{zwp_virtual_keyboard_manager_v1, zwp_virtual_keyboard_v1},
 };
-use wayland_protocols_plasma::fake_input::client::org_kde_kwin_fake_input;
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
     zwlr_virtual_pointer_manager_v1, zwlr_virtual_pointer_v1,
 };
@@ -68,7 +67,7 @@ impl Con {
 
         // Start registry
         let display = connection.display();
-        display.get_registry(&qh, ());
+        let registry = display.get_registry(&qh, ());
         thread::sleep(Duration::from_secs(2));
 
         // Setup WaylandState and dispatch events
@@ -95,6 +94,8 @@ impl Con {
             virtual_pointer: None,
             base_time: Instant::now(),
         };
+
+        connection.bind_globals(&registry)?;
 
         connection.init_protocols()?;
 
@@ -129,6 +130,52 @@ impl Con {
         })
     }
 
+    fn bind_globals(&mut self, registry: &wl_registry::WlRegistry) -> Result<(), NewConError> {
+        let qh = self.event_queue.handle();
+
+        // Bind to wl_seat if it exists
+        // MUST be done before doing any bindings relevant to the input_method
+        // protocol, otherwise e.g. labwc crashes
+        if let Some(&(name, version)) = self.state.globals.get("wl_seat") {
+            let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, version.min(1), &qh, ());
+            self.state.seat = Some(seat);
+
+            self.event_queue
+                .roundtrip(&mut self.state)
+                .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
+        }
+
+        // Bind to zwp_virtual_keyboard_manager_v1
+        if let Some(&(name, version)) = self.state.globals.get("zwp_virtual_keyboard_manager_v1") {
+            let manager = registry
+                .bind::<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, _, _>(
+                    name,
+                    version.min(1),
+                    &qh,
+                    (),
+                );
+            self.state.keyboard_manager = Some(manager);
+        }
+
+        // Bind to zwp_input_method_manager_v2
+        if let Some(&(name, version)) = self.state.globals.get("zwp_input_method_manager_v2") {
+            let manager = registry
+                .bind::<zwp_input_method_manager_v2::ZwpInputMethodManagerV2, _, _>(
+                    name,
+                    version.min(1),
+                    &qh,
+                    (),
+                );
+            self.state.im_manager = Some(manager);
+        }
+
+        self.event_queue
+            .roundtrip(&mut self.state)
+            .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
+
+        Ok(())
+    }
+
     /// Try to set up all the protocols. An error is returned, if no protocol is
     /// available
     fn init_protocols(&mut self) -> Result<(), NewConError> {
@@ -155,15 +202,6 @@ impl Con {
             .pointer_manager
             .as_ref()
             .map(|vp_mgr| vp_mgr.create_virtual_pointer(self.state.seat.as_ref(), &qh, ()));
-
-        // Try to authenticate for the KDE Fake Input protocol
-        // TODO: Get this protocol to work
-        if let Some(kde_input) = &self.state.kde_input {
-            kde_input.authenticate(
-                "enigo".to_string(),
-                "enter keycodes or move the mouse".to_string(),
-            );
-        }
 
         trace!(
             "protocols available\nvirtual_keyboard: {}\ninput_method: {}\nvirtual_pointer: {}",
@@ -317,11 +355,12 @@ impl Bind<Keycode> for Con {
 #[derive(Clone, Debug, Default)]
 /// Stores the manager for the various protocols
 struct WaylandState {
+    // Map of interface name -> (global name, version)
+    globals: std::collections::HashMap<String, (u32, u32)>,
     keyboard_manager: Option<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1>,
     im_manager: Option<zwp_input_method_manager_v2::ZwpInputMethodManagerV2>,
     im_serial: Wrapping<u32>,
     pointer_manager: Option<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1>,
-    kde_input: Option<org_kde_kwin_fake_input::OrgKdeKwinFakeInput>,
     seat: Option<wl_seat::WlSeat>,
     /*  output: Option<wl_output::WlOutput>,
     width: i32,
@@ -333,72 +372,28 @@ impl WaylandState {}
 impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
     fn event(
         state: &mut Self,
-        registry: &wl_registry::WlRegistry,
+        _: &wl_registry::WlRegistry,
         event: wl_registry::Event,
         (): &(),
         _: &Connection,
-        qh: &QueueHandle<Self>,
+        _: &QueueHandle<Self>,
     ) {
         // When receiving events from the wl_registry, we are only interested in the
-        // `global` event, which signals a new available global.
+        // `global` event, which signals a new available global and then store it to
+        // later bind to them
         if let wl_registry::Event::Global {
-            name, interface, ..
+            name,
+            interface,
+            version,
         } = event
         {
-            match &interface[..] {
-                "wl_seat" => {
-                    let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, 5, qh, ());
-                    state.seat = Some(seat);
-                }
-                /*"wl_output" => {
-                    let output = registry.bind::<wl_output::WlOutput, _, _>(name, 1, qh, ());
-                    state.output = Some(output);
-                }
-                "zwp_input_method_manager_v2" => {
-                    let manager = registry
-                        .bind::<zwp_input_method_manager_v2::ZwpInputMethodManagerV2, _, _>(
-                            name,
-                            1, // TODO: should this be 2?
-                            qh,
-                            (),
-                        );
-                    state.im_manager = Some(manager);
-                }*/
-                "zwp_virtual_keyboard_manager_v1" => {
-                    let manager = registry
-                        .bind::<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, _, _>(
-                        name,
-                        1,
-                        qh,
-                        (),
-                    );
-                    state.keyboard_manager = Some(manager);
-                }
-                "zwlr_virtual_pointer_manager_v1" => {
-                    let manager = registry
-                        .bind::<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, _, _>(
-                        name,
-                        1,
-                        qh,
-                        (),
-                    );
-                    state.pointer_manager = Some(manager);
-                }
-                "org_kde_kwin_fake_input" => {
-                    debug!("FAKE_INPUT AVAILABLE!");
-                    let kde_input = registry
-                        .bind::<org_kde_kwin_fake_input::OrgKdeKwinFakeInput, _, _>(
-                            name,
-                            1,
-                            qh,
-                            (),
-                        );
-                    state.kde_input = Some(kde_input);
-                }
-                s => {
-                    trace!("i: {}", s);
-                }
-            }
+            trace!(
+                "Global announced: {} (name: {}, version: {})",
+                interface,
+                name,
+                version
+            );
+            state.globals.insert(interface, (name, version));
         }
     }
 }
@@ -455,20 +450,6 @@ impl Dispatch<zwp_input_method_v2::ZwpInputMethodV2, ()> for WaylandState {
             _ => (), // TODO
         }
         warn!("Got a input method event {:?}", event);
-    }
-}
-impl Dispatch<org_kde_kwin_fake_input::OrgKdeKwinFakeInput, ()> for WaylandState {
-    fn event(
-        _state: &mut Self,
-        _vk: &org_kde_kwin_fake_input::OrgKdeKwinFakeInput,
-        event: org_kde_kwin_fake_input::Event,
-        (): &(),
-        _: &Connection,
-        _qh: &QueueHandle<Self>,
-    ) {
-        // This should never happen, as there are no events specified for this
-        // in the protocol
-        warn!("Got a plasma fake input event {:?}", event);
     }
 }
 

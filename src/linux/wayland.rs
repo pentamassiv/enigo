@@ -123,10 +123,11 @@ impl Con {
         };
 
         connection.init_protocols()?;
-
+        /*
         if connection.apply_keymap().is_err() {
             return Err(NewConError::EstablishCon("unable to apply the keymap"));
         };
+        */
         Ok(connection)
     }
 
@@ -360,6 +361,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         );
                     state.im_manager = Some(manager);
                 }
+                /*
                 "zwp_virtual_keyboard_manager_v1" => {
                     let manager = registry
                         .bind::<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, _, _>(
@@ -390,7 +392,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                             (),
                         );
                     state.kde_input = Some(kde_input);
-                }
+                } */
                 s => {
                     trace!("i: {}", s);
                 }

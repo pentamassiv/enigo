@@ -355,8 +355,8 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
             match &interface[..] {
                 "wl_seat" => {
                     let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, 1, qh, ());
-                    seat.get_keyboard(qh, ());
-                    seat.get_pointer(qh, ());
+                    //  seat.get_keyboard(qh, ());
+                    //  seat.get_pointer(qh, ());
                     state.seat = Some(seat);
                 }
                 /*"wl_output" => {
@@ -495,6 +495,7 @@ impl Dispatch<wl_seat::WlSeat, ()> for WaylandState {
     }
 }
 
+/*
 impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
     fn event(
         _state: &mut Self,
@@ -521,7 +522,6 @@ impl Dispatch<wl_pointer::WlPointer, ()> for WaylandState {
     }
 }
 
-/*
 impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
     fn event(
         state: &mut Self,

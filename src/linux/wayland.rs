@@ -8,7 +8,11 @@ use std::time::Instant;
 
 use log::{debug, error, trace, warn};
 use wayland_client::{
-    protocol::{wl_pointer, wl_registry, wl_seat},
+    protocol::{
+        wl_keyboard::{self, WlKeyboard},
+        wl_pointer::{self, WlPointer},
+        wl_registry, wl_seat,
+    },
     Connection, Dispatch, EventQueue, QueueHandle,
 };
 use wayland_protocols_misc::{
@@ -345,6 +349,8 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
             match &interface[..] {
                 "wl_seat" => {
                     let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, 1, qh, ());
+                    seat.get_keyboard(qh, ());
+                    seat.get_pointer(qh, ());
                     state.seat = Some(seat);
                 }
                 /*"wl_output" => {
@@ -476,6 +482,32 @@ impl Dispatch<wl_seat::WlSeat, ()> for WaylandState {
         _qh: &QueueHandle<Self>,
     ) {
         warn!("Got a seat event {:?}", event);
+    }
+}
+
+impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
+    fn event(
+        _state: &mut Self,
+        _seat: &wl_keyboard::WlKeyboard,
+        event: wl_keyboard::Event,
+        (): &(),
+        _: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        warn!("Got a keyboard event {:?}", event);
+    }
+}
+
+impl Dispatch<wl_pointer::WlPointer, ()> for WaylandState {
+    fn event(
+        _state: &mut Self,
+        _seat: &wl_pointer::WlPointer,
+        event: wl_pointer::Event,
+        (): &(),
+        _: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        warn!("Got a pointer event {:?}", event);
     }
 }
 

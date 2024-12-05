@@ -144,11 +144,11 @@ impl Con {
         {
             return Err(NewConError::EstablishCon("wayland roundtrip not possible"));
         }
-        /*
+
         if connection.apply_keymap().is_err() {
             return Err(NewConError::EstablishCon("unable to apply the keymap"));
         };
-        */
+
         Ok(connection)
     }
 

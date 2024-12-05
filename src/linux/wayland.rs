@@ -1,10 +1,12 @@
-use std::collections::VecDeque;
-use std::convert::TryInto;
-use std::env;
-use std::os::unix::io::AsFd;
-use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
-use std::time::Instant;
+use std::{
+    collections::VecDeque,
+    convert::TryInto as _,
+    env,
+    num::Wrapping,
+    os::unix::{io::AsFd, net::UnixStream},
+    path::PathBuf,
+    time::Instant,
+};
 
 use log::{debug, error, trace, warn};
 use wayland_client::{
@@ -37,7 +39,7 @@ pub struct Con {
     event_queue: EventQueue<WaylandState>,
     state: WaylandState,
     virtual_keyboard: Option<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1>,
-    input_method: Option<(zwp_input_method_v2::ZwpInputMethodV2, u32)>,
+    input_method: Option<zwp_input_method_v2::ZwpInputMethodV2>,
     virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
     base_time: std::time::Instant,
 }
@@ -99,7 +101,7 @@ impl Con {
         display.get_registry(&qh, ());
 
         // Setup WaylandState and dispatch events
-        let mut state = WaylandState::new();
+        let mut state = WaylandState::default();
         if event_queue.roundtrip(&mut state).is_err() {
             return Err(NewConError::EstablishCon("wayland roundtrip not possible"));
         };
@@ -167,7 +169,7 @@ impl Con {
                 .state
                 .im_manager
                 .as_ref()
-                .map(|im_mgr| (im_mgr.get_input_method(seat, &qh, ()), 0));
+                .map(|im_mgr| im_mgr.get_input_method(seat, &qh, ()));
         };
 
         // Setup virtual pointer
@@ -317,10 +319,12 @@ impl Bind<Keycode> for Con {
     // On Wayland only the whole keymap can be applied
 }
 
+#[derive(Clone, Debug, Default)]
 /// Stores the manager for the various protocols
 struct WaylandState {
     keyboard_manager: Option<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1>,
     im_manager: Option<zwp_input_method_manager_v2::ZwpInputMethodManagerV2>,
+    im_serial: Wrapping<u32>,
     pointer_manager: Option<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1>,
     kde_input: Option<org_kde_kwin_fake_input::OrgKdeKwinFakeInput>,
     seat: Option<wl_seat::WlSeat>,
@@ -329,20 +333,7 @@ struct WaylandState {
     height: i32,*/
 }
 
-impl WaylandState {
-    fn new() -> Self {
-        Self {
-            keyboard_manager: None,
-            im_manager: None,
-            pointer_manager: None,
-            kde_input: None,
-            seat: None,
-            /*  output: None,
-            width: 0,
-            height: 0,*/
-        }
-    }
-}
+impl WaylandState {}
 
 impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
     fn event(
@@ -462,13 +453,17 @@ impl Dispatch<zwp_input_method_manager_v2::ZwpInputMethodManagerV2, ()> for Wayl
 }
 impl Dispatch<zwp_input_method_v2::ZwpInputMethodV2, ()> for WaylandState {
     fn event(
-        _state: &mut Self,
+        state: &mut Self,
         _vk: &zwp_input_method_v2::ZwpInputMethodV2,
         event: zwp_input_method_v2::Event,
         (): &(),
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
+        match event {
+            zwp_input_method_v2::Event::Done => state.im_serial += Wrapping(1u32),
+            _ => (), // TODO
+        }
         warn!("Got a input method event {:?}", event);
     }
 }
@@ -592,7 +587,7 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
 
 impl Keyboard for Con {
     fn fast_text(&mut self, text: &str) -> InputResult<Option<()>> {
-        if let Some((im, serial)) = self.input_method.as_mut() {
+        if let Some(im) = self.input_method.as_mut() {
             is_alive(im)?;
             trace!("fast text input with imput_method protocol");
             // Process all previous events to have a correct serial no
@@ -600,8 +595,7 @@ impl Keyboard for Con {
                 return Err(InputError::Simulate("The roundtrip on Wayland failed"));
             }
             im.commit_string(text.to_string());
-            im.commit(*serial);
-            *serial = serial.wrapping_add(1);
+            im.commit(self.state.im_serial.0);
             // TODO: Change to flush()
             if self.event_queue.roundtrip(&mut self.state).is_err() {
                 return Err(InputError::Simulate("The roundtrip on Wayland failed"));

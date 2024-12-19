@@ -88,8 +88,10 @@ jobs:
             do_in_pod sudo dnf install -y gcc make automake autoconf libtool
             do_in_pod sudo dnf install -y xdotool libxkbcommon-devel libXi-devel libXtst-devel ImageMagick
             pwd
+            ls
             cd ..
-            pwd
+            pwd 
+            ls
             podman cp ./enigo "gnome-shell-pod:/home/gnomeshell/enigo"
                        
       - name: Rust stuff
@@ -100,7 +102,10 @@ jobs:
             }
 
             do_in_pod pwd
+            do_in_pod ls
             do_in_pod cd enigo
+            do_in_pod pwd
+            do_in_pod ls
             do_in_pod cargo test integration --release --no-default-features --features libei -- --test-threads=1 --nocapture --include-ignored
             #do_in_pod 
             

@@ -100,7 +100,7 @@ jobs:
 
             do_in_pod pwd
             do_in_pod ls
-            do_in_pod cargo test integration --release --no-default-features --features libei -- --test-threads=1 --nocapture --include-ignored
+            do_in_pod CARGO_TERM_COLOR=always RUST_LOG=debug cargo test integration --release --no-default-features --features libei -- --test-threads=1 --nocapture --include-ignored
             #do_in_pod 
             
             

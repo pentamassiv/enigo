@@ -92,7 +92,7 @@ jobs:
             cd ..
             pwd 
             ls
-            podman cp ./enigo "gnome-shell-pod:/home/gnomeshell/enigo"
+            podman cp ./enigo "gnome-shell-pod:/home/gnomeshell"
                        
       - name: Rust stuff
         run: |

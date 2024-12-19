@@ -75,10 +75,10 @@ jobs:
 
       - name: Run tests
         run: |
-            podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK -td ghcr.io/schneegans/gnome-shell-pod-41:latest
-            podman exec --user gnomeshell --workdir /home/gnomeshell "ghcr.io/schneegans/gnome-shell-pod-41" set-env.sh sudo apt install firefox
-            podman exec --user gnomeshell --workdir /home/gnomeshell "ghcr.io/schneegans/gnome-shell-pod-41" set-env.sh gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
-            # podman exec --user gnomeshell --workdir /home/gnomeshell "ghcr.io/schneegans/gnome-shell-pod-41" set-env.sh "$@"
+            podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK --name gnome-shell-pod -td ghcr.io/schneegans/gnome-shell-pod-41:latest
+            podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh sudo apt install firefox
+            podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
+            # podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh "$@"
             # podman cp "${POD}:/opt/Xvfb_screen0" - | tar xf - --to-command "convert xwd:- ${WORK_DIR}/screen.png"
      
 

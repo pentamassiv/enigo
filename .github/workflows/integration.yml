@@ -77,6 +77,10 @@ jobs:
      # - name: Set up container
      #   run: /local/bin/set-env.sh
 
+      - name: start GNOME Shell
+        run: systemctl --user start "gnome-xsession@:99"
+
+
       - name: Install Firefox on macOS
         if: runner.os == 'macOS'
         run: brew install --cask firefox

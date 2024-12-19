@@ -8,8 +8,7 @@ runs:
       run:   |
         if [ "$RUNNER_OS" == "Linux" ]; then
           sudo dnf upgrade -y --refresh
-          sudo dnf groupinstall -y "Development Tools"
-          sudo dnf install -y gcc
+          sudo dnf install -y gcc make automake autoconf libtool
           sudo dnf install -y xdotool libxkbcommon-devel libXi-devel libXtst-devel
           echo "$RUNNER_OS"
         elif [ "$RUNNER_OS" == "Windows" ]; then

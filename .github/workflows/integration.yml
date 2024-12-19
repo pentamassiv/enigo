@@ -75,9 +75,24 @@ jobs:
 
       - name: Run tests
         run: |
+            # This function is used below to execute any shell command inside the running container.
+            do_in_pod() {
+              podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh "$@"
+            }
+            
             podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK --name gnome-shell-pod -td ghcr.io/schneegans/gnome-shell-pod-41:latest
-            podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh sudo dnf install -y firefox
-            podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
+            do_in_pod gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
+            do_in_pod sudo dnf upgrade -y --refresh
+            do_in_pod sudo dnf install -y firefox
+            do_in_pod sudo dnf install -y rust
+            do_in_pod sudo dnf install -y gcc make automake autoconf libtool
+            do_in_pod sudo dnf install -y xdotool libxkbcommon-devel libXi-devel libXtst-devel ImageMagick
+            #do_in_pod 
+            #do_in_pod 
+
+            
+            
+            
             # podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh "$@"
             # podman cp "${POD}:/opt/Xvfb_screen0" - | tar xf - --to-command "convert xwd:- ${WORK_DIR}/screen.png"
      

@@ -58,7 +58,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     container:
       image: ghcr.io/schneegans/gnome-shell-pod-41:latest
-      options: --privileged --network=host
+      options: --privileged
     steps:
       - uses: actions/checkout@v4
         with:

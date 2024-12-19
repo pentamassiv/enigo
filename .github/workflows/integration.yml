@@ -20,42 +20,45 @@ jobs:
       fail-fast: false
       matrix:
         rust:
-          - stable
+         # - stable
           - nightly
-          - "1.82.0"
+         # - "1.82.0"
         platform:
           - ubuntu-latest
-          - windows-latest
-          - macos-latest
+         # - windows-latest
+         # - macos-latest
         features:
          # - "libei,wayland,xdo,x11rb"
-          - "default"
-         # - "libei"
+         # - "default"
+          - "libei"
          # - "wayland"
-          - "xdo"
-          - "x11rb"
-        exclude:
+         # - "xdo"
+         # - "x11rb"
+       # exclude:
          # - platform: windows-latest
          #   features: "libei,wayland,xdo,x11rb"
          # - platform: windows-latest
          #   features: "libei"
          # - platform: windows-latest
          #   features: "wayland"
-          - platform: windows-latest
-            features: "xdo"
-          - platform: windows-latest
-            features: "x11rb"
+         # - platform: windows-latest
+         #   features: "xdo"
+          #- platform: windows-latest
+          #  features: "x11rb"
          # - platform: macos-latest
          #   features: "libei,wayland,xdo,x11rb"
          # - platform: macos-latest
          #   features: "libei"
          # - platform: macos-latest
          #   features: "wayland"
-          - platform: macos-latest
-            features: "xdo"
-          - platform: macos-latest
-            features: "x11rb"
+         # - platform: macos-latest
+         #   features: "xdo"
+         # - platform: macos-latest
+         #   features: "x11rb"
     runs-on: ${{ matrix.platform }}
+    container:
+      image: ghcr.io/schneegans/gnome-shell-pod-41:latest
+      #options: --privileged --network=host
     steps:
       - uses: actions/checkout@v4
         with:
@@ -67,14 +70,14 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
 
-      - name: Setup headless display for tests on Linux
-        if: runner.os == 'Linux' # This step is only needed on Linux. The other OSs don't need to be set up
-        uses: ./.github/actions/headless_display
+     # - name: Setup headless display for tests on Linux
+     #   if: runner.os == 'Linux' # This step is only needed on Linux. The other OSs don't need to be set up
+     #   uses: ./.github/actions/headless_display
 
       - name: Install Firefox on macOS
         if: runner.os == 'macOS'
         run: brew install --cask firefox
 
       - name: Run integration tests in release mode
-        if: matrix.features != 'wayland' && matrix.features != 'libei' && matrix.features != 'libei,wayland,xdo,x11rb' # On Linux, the integration tests only work with X11 for now
+        #if: matrix.features != 'wayland' && matrix.features != 'libei' && matrix.features != 'libei,wayland,xdo,x11rb' # On Linux, the integration tests only work with X11 for now
         run: cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored

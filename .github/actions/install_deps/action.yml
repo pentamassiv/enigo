@@ -7,10 +7,13 @@ runs:
     - name:  Install dependencies
       run:   |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo dnf upgrade -y --refresh
-          sudo dnf install -y gcc make automake autoconf libtool
-          sudo dnf install -y xdotool libxkbcommon-devel libXi-devel libXtst-devel ImageMagick
-          echo "$RUNNER_OS"
+          sudo apt-get update -q -y && sudo apt-get upgrade -y
+          sudo apt-get install -y libxdo-dev libxkbcommon-dev libxi-dev libxtst-dev
+          sudo apt-get install -y gettext imagemagick
+         # sudo dnf upgrade -y --refresh
+         # sudo dnf install -y gcc make automake autoconf libtool
+         # sudo dnf install -y xdotool libxkbcommon-devel libXi-devel libXtst-devel ImageMagick
+         # echo "$RUNNER_OS"
         elif [ "$RUNNER_OS" == "Windows" ]; then
           echo "$RUNNER_OS"
         elif [ "$RUNNER_OS" == "macOS" ]; then

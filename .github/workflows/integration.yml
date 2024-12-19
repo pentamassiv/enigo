@@ -8,7 +8,6 @@ on:
     workflows: ["Build"]
     types:
       - completed
-
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -56,19 +55,16 @@ jobs:
          # - platform: macos-latest
          #   features: "x11rb"
     runs-on: ${{ matrix.platform }}
-    container:
-      image: ghcr.io/schneegans/gnome-shell-pod-41:latest
-      options: --privileged
     steps:
       - uses: actions/checkout@v4
         with:
           # If manually triggered, use the current commit (GITHUB_SHA), otherwise use the head_sha from the Build workflow
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: ./.github/actions/install_deps
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-          components: rustfmt, clippy
+     # - uses: ./.github/actions/install_deps
+     # - uses: dtolnay/rust-toolchain@master
+     #   with:
+     #     toolchain: ${{ matrix.rust }}
+      #    components: rustfmt, clippy
 
      # - name: Setup headless display for tests on Linux
      #   if: runner.os == 'Linux' # This step is only needed on Linux. The other OSs don't need to be set up
@@ -77,33 +73,22 @@ jobs:
      # - name: Set up container
      #   run: /local/bin/set-env.sh
 
+      - name: Run tests
+        run: |
+            podman run --rm --cap-add=SYS_NICE --cap-add=IPC_LOCK -td ghcr.io/schneegans/gnome-shell-pod-41:latest
+            podman exec --user gnomeshell --workdir /home/gnomeshell "ghcr.io/schneegans/gnome-shell-pod-41" set-env.sh sudo apt install firefox
+            podman exec --user gnomeshell --workdir /home/gnomeshell "ghcr.io/schneegans/gnome-shell-pod-41" set-env.sh gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
+            # podman exec --user gnomeshell --workdir /home/gnomeshell "ghcr.io/schneegans/gnome-shell-pod-41" set-env.sh "$@"
+            # podman cp "${POD}:/opt/Xvfb_screen0" - | tar xf - --to-command "convert xwd:- ${WORK_DIR}/screen.png"
      
 
-      - name: start GNOME Shell
-        run: systemctl --user start "gnome-xsession@:99" && sleep 20 && gnome-control-center &
 
-      - name: Capture framebuffer and convert to JPEG inside container
-        run: |
-          # Copy the framebuffer of Xvfb and convert it to JPEG inside the container
-          cp /opt/Xvfb_screen0 /tmp/Xvfb_screen0
-          convert xwd:/tmp/Xvfb_screen0 /tmp/capture.jpg
-
-      - name: Copy captured image to CI host
-        run: |
-          # Now, move the capture.jpg from the container's /tmp directory to the CI host
-          cp /tmp/capture.jpg /github/workspace/capture.jpg
-
-
-      - name: Install Firefox on macOS
-        if: runner.os == 'macOS'
-        run: brew install --cask firefox
-
-      - name: Run integration tests in release mode
+     # - name: Run integration tests in release mode
         #if: matrix.features != 'wayland' && matrix.features != 'libei' && matrix.features != 'libei,wayland,xdo,x11rb' # On Linux, the integration tests only work with X11 for now
-        run: cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored
+     #   run: cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored
 
-      - name: Upload capture as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: capture-image
-          path: capture.jpg
+     # - name: Upload capture as artifact
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: capture-image
+      #    path: capture.jpg

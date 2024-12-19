@@ -58,7 +58,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     container:
       image: ghcr.io/schneegans/gnome-shell-pod-41:latest
-      #options: --privileged --network=host
+      options: --privileged --network=host
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,8 +77,21 @@ jobs:
      # - name: Set up container
      #   run: /local/bin/set-env.sh
 
+     
+
       - name: start GNOME Shell
-        run: systemctl --user start "gnome-xsession@:99"
+        run: systemctl --user start "gnome-xsession@:99" && sleep 20 && gnome-control-center &
+
+      - name: Capture framebuffer and convert to JPEG inside container
+        run: |
+          # Copy the framebuffer of Xvfb and convert it to JPEG inside the container
+          cp /opt/Xvfb_screen0 /tmp/Xvfb_screen0
+          convert xwd:/tmp/Xvfb_screen0 /tmp/capture.jpg
+
+      - name: Copy captured image to CI host
+        run: |
+          # Now, move the capture.jpg from the container's /tmp directory to the CI host
+          cp /tmp/capture.jpg /github/workspace/capture.jpg
 
 
       - name: Install Firefox on macOS

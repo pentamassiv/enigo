@@ -84,7 +84,7 @@ jobs:
             do_in_pod gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
             do_in_pod sudo dnf upgrade -y --refresh
             do_in_pod sudo dnf install -y firefox
-            do_in_pod sudo dnf install -y rust
+            do_in_pod sudo dnf install -y rustup
             do_in_pod sudo dnf install -y gcc make automake autoconf libtool
             do_in_pod sudo dnf install -y xdotool libxkbcommon-devel libXi-devel libXtst-devel ImageMagick
             do_in_pod cargo test integration --release --no-default-features --features libei -- --test-threads=1 --nocapture --include-ignored

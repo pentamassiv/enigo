@@ -73,6 +73,9 @@ jobs:
      # - name: Setup headless display for tests on Linux
      #   if: runner.os == 'Linux' # This step is only needed on Linux. The other OSs don't need to be set up
      #   uses: ./.github/actions/headless_display
+      
+      - name: Set up container
+        run: /local/bin/set-env.sh
 
       - name: Install Firefox on macOS
         if: runner.os == 'macOS'

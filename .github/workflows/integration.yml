@@ -84,7 +84,7 @@ jobs:
               podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh "$@"
             }
             
-            podman run --rm --cap-add=SYS_ADMIN --cap-add=SYS_NICE --cap-add=IPC_LOCK --device /dev/fuse --name gnome-shell-pod -td ghcr.io/schneegans/gnome-shell-pod-41:latest
+            podman run --rm --cap-add=SYS_ADMIN --cap-add=SYS_NICE --cap-add=IPC_LOCK --device /dev/fuse -v /dev/shm:/dev/shm --name gnome-shell-pod -td ghcr.io/schneegans/gnome-shell-pod-41:latest
             do_in_pod gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
             do_in_pod sudo dnf upgrade -y --refresh
             do_in_pod sudo dnf install -y firefox

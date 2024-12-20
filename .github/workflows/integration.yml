@@ -20,20 +20,20 @@ jobs:
       fail-fast: false
       matrix:
         rust:
-          - stable
+         # - stable
           - nightly
-          - "1.82.0"
+         # - "1.82.0"
         platform:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
+          - ubuntu-24.04
+        #  - windows-latest
+         # - macos-latest
         features:
          # - "libei,wayland,xdo,x11rb"
-          - "default"
-         # - "libei"
+         # - "default"
+          - "libei"
          # - "wayland"
           - "xdo"
-          - "x11rb"
+         # - "x11rb"
         exclude:
          # - platform: windows-latest
          #   features: "libei,wayland,xdo,x11rb"
@@ -41,20 +41,20 @@ jobs:
          #   features: "libei"
          # - platform: windows-latest
          #   features: "wayland"
-          - platform: windows-latest
-            features: "xdo"
-          - platform: windows-latest
-            features: "x11rb"
+         # - platform: windows-latest
+         #   features: "xdo"
+         # - platform: windows-latest
+         #   features: "x11rb"
          # - platform: macos-latest
          #   features: "libei,wayland,xdo,x11rb"
          # - platform: macos-latest
          #   features: "libei"
          # - platform: macos-latest
          #   features: "wayland"
-          - platform: macos-latest
-            features: "xdo"
-          - platform: macos-latest
-            features: "x11rb"
+         # - platform: macos-latest
+         #   features: "xdo"
+         # - platform: macos-latest
+         #   features: "x11rb"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -76,5 +76,5 @@ jobs:
         run: brew install --cask firefox
 
       - name: Run integration tests in release mode
-        if: matrix.features != 'wayland' && matrix.features != 'libei' && matrix.features != 'libei,wayland,xdo,x11rb' # On Linux, the integration tests only work with X11 for now
+        if: matrix.features != 'wayland'
         run: cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored

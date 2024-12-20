@@ -27,6 +27,7 @@ pub static BROWSER_INSTANCE: std::sync::LazyLock<Option<std::process::Child>> =
         } else {
             // On Linux, use the "firefox" command
             std::process::Command::new("firefox")
+                .env("MOZ_ENABLE_WAYLAND", "1") // Set the environment variable for Wayland
                 .args(["--kiosk", &url])
                 .spawn()
                 .expect("Failed to start Firefox")

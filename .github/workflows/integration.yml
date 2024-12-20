@@ -91,8 +91,8 @@ jobs:
             
             podman cp ./. "gnome-shell-pod:/home/gnomeshell/"
             do_in_pod systemctl --user start "gnome-wayland-nested@:99"
-            #do_in_pod systemctl --user start xdg-desktop-portal
-            #do_in_pod systemctl --user start xdg-desktop-portal-gnome
+            do_in_pod systemctl --user start xdg-desktop-portal
+            do_in_pod systemctl --user start xdg-desktop-portal-gnome
             sleep 10
             do_in_pod dbus-send --session --dest=org.freedesktop.portal.Desktop --type=method_call --print-reply / org.freedesktop.DBus.Introspectable.Introspect
                        

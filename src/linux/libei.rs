@@ -124,6 +124,15 @@ impl Con {
             let stream = UnixStream::from(fd);
             stream.set_nonblocking(true).unwrap(); // TODO: Check if this is a good idea
             trace!("done open_connection");
+
+            /*
+            // Step 1: Get the Wayland socket path
+            let socket_path = std::env::var("WAYLAND_DISPLAY")
+                .unwrap_or_else(|_| "/run/user/1000/wayland-0".to_string());
+            // Step 2: Connect to Wayland server using UnixStream
+            let stream =
+                UnixStream::connect(socket_path).expect("Failed to connect to Wayland socket");
+                */
             ei::Context::new(stream).unwrap()
         }
     }

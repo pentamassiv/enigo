@@ -102,6 +102,7 @@ jobs:
             do_in_pod sudo systemctl restart polkit
             do_in_pod sudo systemctl status polkit
             do_in_pod systemctl --user start "gnome-wayland-nested@:99"
+            sleep 10
 
             do_in_pod systemctl --user start xdg-desktop-portal
             echo "###########"

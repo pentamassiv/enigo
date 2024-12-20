@@ -34,7 +34,7 @@ jobs:
          # - "wayland"
           - "xdo"
          # - "x11rb"
-        exclude:
+        #exclude:
          # - platform: windows-latest
          #   features: "libei,wayland,xdo,x11rb"
          # - platform: windows-latest

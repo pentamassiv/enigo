@@ -71,10 +71,18 @@ jobs:
         if: runner.os == 'Linux' # This step is only needed on Linux. The other OSs don't need to be set up
         uses: ./.github/actions/headless_display
 
+      - name: Set up libei
+        if: matrix.features == 'libei'
+        run: |
+          sudo apt-get install -y xdg-desktop-portal xdg-desktop-portal-gnome
+          systemctl --user restart xdg-desktop-portal
+          echo $XDG_SESSION_TYPE
+
+
       - name: Install Firefox on macOS
         if: runner.os == 'macOS'
         run: brew install --cask firefox
 
       - name: Run integration tests in release mode
         if: matrix.features != 'wayland'
-        run: cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored
+        run: RUST_LOG=debug cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored

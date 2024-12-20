@@ -87,11 +87,14 @@ jobs:
             do_in_pod sudo dnf install -y cargo rust clippy
             do_in_pod sudo dnf install -y gcc make automake autoconf libtool
             do_in_pod sudo dnf install -y xdotool libxkbcommon-devel libXi-devel libXtst-devel ImageMagick
+            # do_in_pod sudo dnf install -y xdg-desktop-portal xdg-desktop-portal-gnome
             pwd
             ls 
             podman cp ./. "gnome-shell-pod:/home/gnomeshell/"
-            systemctl --user start xdg-desktop-portal
-            systemctl --user start xdg-desktop-portal-gnome
+            do_in_pod systemctl --user start "gnome-wayland-nested@:99"
+            #do_in_pod systemctl --user start xdg-desktop-portal
+            #do_in_pod systemctl --user start xdg-desktop-portal-gnome
+            sleep 10
             dbus-send --session --dest=org.freedesktop.portal.Desktop --type=method_call --print-reply / org.freedesktop.DBus.Introspectable.Introspect
                        
       - name: Rust stuff
@@ -105,7 +108,7 @@ jobs:
             do_in_pod pwd
             do_in_pod ls
             do_in_pod CARGO_TERM_COLOR=always RUST_LOG=debug cargo test integration --release --no-default-features --features libei -- --test-threads=1 --nocapture --include-ignored
-            #do_in_pod 
+            #do_in_pod
             
             
             # podman exec --user gnomeshell --workdir /home/gnomeshell gnome-shell-pod set-env.sh "$@"

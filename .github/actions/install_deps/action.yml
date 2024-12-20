@@ -10,6 +10,11 @@ runs:
           sudo apt-get update -q -y && sudo apt-get upgrade -y
           sudo apt-get install -y libxdo-dev libxkbcommon-dev libxi-dev libxtst-dev
           sudo apt-get install -y gettext imagemagick
+          sudo apt-get install -y xdg-desktop-portal xdg-desktop-portal-gnome
+          systemctl --user start xdg-desktop-portal
+          systemctl --user start xdg-desktop-portal-gnome
+          dbus-send --session --dest=org.freedesktop.portal.Desktop --type=method_call --print-reply / org.freedesktop.DBus.Introspectable.Introspect
+
          # sudo dnf upgrade -y --refresh
          # sudo dnf install -y gcc make automake autoconf libtool
          # sudo dnf install -y xdotool libxkbcommon-devel libXi-devel libXtst-devel ImageMagick

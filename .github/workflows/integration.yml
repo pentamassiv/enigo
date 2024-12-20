@@ -74,10 +74,10 @@ jobs:
       - name: Set up libei
         if: matrix.features == 'libei'
         run: |
-          sudo apt-get install -y xdg-desktop-portal xdg-desktop-portal-gnome
-          systemctl --user restart xdg-desktop-portal
+          sudo apt-get install -y xdg-desktop-portal xdg-desktop-portal-gnome libei
           echo $XDG_SESSION_TYPE
           mutter --version
+          systemctl --user restart xdg-desktop-portal
 
 
       - name: Install Firefox on macOS

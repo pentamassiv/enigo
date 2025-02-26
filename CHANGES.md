@@ -14,6 +14,7 @@
 - linux: wayland: Fix the serial number of input_method events
 - linux: wayland: Correct whitespace and nullbyte at the end of the keymap
 - linux: wayland: Send messages in the correct order and make sure Wayland objects are created before they are used
+- linux: wayland: Flush the Wayland queue when moving the mouse and simulating a scroll instead of waiting for a roundtrip
 
 # 0.3.0
 ## Changed

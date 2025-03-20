@@ -89,10 +89,10 @@ impl Con {
             .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
 
         let keymap = KeyMap::new(
-            8,
+            9,
             255,
             // All keycodes are unused when initialized
-            (8..=255).collect::<VecDeque<Keycode>>(),
+            (9..=255).collect::<VecDeque<Keycode>>(),
             0,
             Vec::new(),
         );

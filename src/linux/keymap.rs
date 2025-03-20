@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::TryInto;
 use std::fmt::Display;
 
@@ -51,7 +51,7 @@ pub struct KeyMap<Keycode> {
 
 impl<Keycode> KeyMap<Keycode>
 where
-    Keycode: Copy + Clone + PartialEq + Display,
+    Keycode: Copy + Clone + PartialEq + Eq + PartialOrd + Display + std::hash::Hash,
     Keycode: TryInto<usize> + TryFrom<usize>,
     <Keycode as TryInto<usize>>::Error: std::fmt::Debug,
     <Keycode as TryFrom<usize>>::Error: std::fmt::Debug,
@@ -60,7 +60,7 @@ where
     pub fn new(
         keycode_min: Keycode,
         keycode_max: Keycode,
-        unused_keycodes: VecDeque<Keycode>,
+        mut unused_keycodes: VecDeque<Keycode>,
         keysyms_per_keycode: u8,
         keysyms: Vec<u32>,
     ) -> Self {
@@ -79,6 +79,66 @@ where
             #[cfg(feature = "x11rb")]
             last_keys: vec![],
         };
+
+        /*
+        pub const KEY_1: u32 = 2;
+        pub const KEY_2: u32 = 3;
+        pub const KEY_3: u32 = 4;
+        pub const KEY_4: u32 = 5;
+        pub const KEY_5: u32 = 6;
+        pub const KEY_6: u32 = 7;
+        pub const KEY_7: u32 = 8;
+        pub const KEY_8: u32 = 9;
+        pub const KEY_9: u32 = 10;
+        pub const KEY_0: u32 = 11;
+        pub const KEY_MINUS: u32 = 12;
+        pub const KEY_EQUAL: u32 = 13;
+
+
+        pub const KEY_Q: u32 = 16;
+        pub const KEY_W: u32 = 17;
+        pub const KEY_E: u32 = 18;
+        pub const KEY_R: u32 = 19;
+        pub const KEY_T: u32 = 20;
+        pub const KEY_Y: u32 = 21;
+        pub const KEY_U: u32 = 22;
+        pub const KEY_I: u32 = 23;
+        pub const KEY_O: u32 = 24;
+        pub const KEY_P: u32 = 25;
+        pub const KEY_LEFTBRACE: u32 = 26;
+        pub const KEY_RIGHTBRACE: u32 = 27;
+
+
+        pub const KEY_A: u32 = 30;
+        pub const KEY_S: u32 = 31;
+        pub const KEY_D: u32 = 32;
+        pub const KEY_F: u32 = 33;
+        pub const KEY_G: u32 = 34;
+        pub const KEY_H: u32 = 35;
+        pub const KEY_J: u32 = 36;
+        pub const KEY_K: u32 = 37;
+        pub const KEY_L: u32 = 38;
+        pub const KEY_SEMICOLON: u32 = 39;
+        pub const KEY_APOSTROPHE: u32 = 40;
+        pub const KEY_GRAVE: u32 = 41;
+
+        pub const KEY_BACKSLASH: u32 = 43;
+        pub const KEY_Z: u32 = 44;
+        pub const KEY_X: u32 = 45;
+        pub const KEY_C: u32 = 46;
+        pub const KEY_V: u32 = 47;
+        pub const KEY_B: u32 = 48;
+        pub const KEY_N: u32 = 49;
+        pub const KEY_M: u32 = 50;
+        pub const KEY_COMMA: u32 = 51;
+        pub const KEY_DOT: u32 = 52;
+        pub const KEY_SLASH: u32 = 53;
+        */
+        let allowed = []; // TODO: Add the correct numbers from above in here
+        let allowed_set: HashSet<Keycode> = allowed.iter().cloned().collect();
+
+        unused_keycodes
+            .retain(|&x| x >= keycode_min && x <= keycode_max && allowed_set.contains(&x)); // squeekboard subtracts 8 from x to check if it is in the allowed_set. I this thats wrong though
 
         let keymap_mapping = KeyMapMapping {
             additionally_mapped: keymap,

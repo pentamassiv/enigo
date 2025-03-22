@@ -1,0 +1,162 @@
+[2025-03-22T13:45:19Z DEBUG enigo] using default settings
+[2025-03-22T13:45:19Z DEBUG enigo::platform::wayland] trying to establish a connection to $WAYLAND_DISPLAY
+[2498591.504][rs] -> wl_display@1.get_registry(wl_registry@2)
+[2498591.538][rs] -> wl_display@1.sync(wl_callback@3)
+[2498591.879][rs] <- wl_registry@2.global, (1, Some("wl_shm"), 2)
+[2498591.912][rs] <- wl_registry@2.global, (2, Some("wl_drm"), 2)
+[2498591.927][rs] <- wl_registry@2.global, (3, Some("zwp_linux_dmabuf_v1"), 4)
+[2498591.942][rs] <- wl_registry@2.global, (4, Some("zcosmic_workspace_manager_v1"), 1)
+[2498591.998][rs] <- wl_registry@2.global, (5, Some("ext_workspace_manager_v1"), 1)
+[2498592.017][rs] <- wl_registry@2.global, (6, Some("zwlr_gamma_control_manager_v1"), 1)
+[2498592.044][rs] <- wl_registry@2.global, (7, Some("zxdg_output_manager_v1"), 3)
+[2498592.067][rs] <- wl_registry@2.global, (8, Some("zwlr_output_manager_v1"), 4)
+[2498592.087][rs] <- wl_registry@2.global, (9, Some("wl_compositor"), 5)
+[2498592.111][rs] <- wl_registry@2.global, (10, Some("wl_subcompositor"), 1)
+[2498592.127][rs] <- wl_registry@2.global, (11, Some("wl_data_device_manager"), 3)
+[2498592.152][rs] <- wl_registry@2.global, (12, Some("zwp_primary_selection_device_manager_v1"), 1)
+[2498592.178][rs] <- wl_registry@2.global, (13, Some("zwp_input_method_manager_v2"), 1)
+[2498592.200][rs] <- wl_registry@2.global, (14, Some("zwp_text_input_manager_v3"), 1)
+[2498592.226][rs] <- wl_registry@2.global, (15, Some("wl_seat"), 9)
+[2498592.250][rs] <- wl_registry@2.global, (16, Some("zwlr_virtual_pointer_manager_v1"), 2)
+[2498592.276][rs] <- wl_registry@2.global, (17, Some("zwp_virtual_keyboard_manager_v1"), 1)
+[2498592.300][rs] <- wl_registry@2.global, (18, Some("zwp_pointer_gestures_v1"), 3)
+[2498592.337][rs] <- wl_registry@2.global, (19, Some("wp_cursor_shape_manager_v1"), 1)
+[2498592.362][rs] <- wl_registry@2.global, (20, Some("xdg_wm_base"), 3)
+[2498592.386][rs] <- wl_registry@2.global, (21, Some("xdg_activation_v1"), 1)
+[2498592.406][rs] <- wl_registry@2.global, (22, Some("org_kde_kwin_server_decoration_manager"), 1)
+[2498592.433][rs] <- wl_registry@2.global, (23, Some("zxdg_decoration_manager_v1"), 1)
+[2498592.459][rs] <- wl_registry@2.global, (24, Some("wp_presentation"), 1)
+[2498592.483][rs] <- wl_registry@2.global, (25, Some("zwlr_export_dmabuf_manager_v1"), 1)
+[2498592.512][rs] <- wl_registry@2.global, (26, Some("zwlr_screencopy_manager_v1"), 3)
+[2498592.532][rs] <- wl_registry@2.global, (27, Some("zwlr_data_control_manager_v1"), 2)
+[2498592.555][rs] <- wl_registry@2.global, (28, Some("wp_security_context_manager_v1"), 1)
+[2498592.582][rs] <- wl_registry@2.global, (29, Some("wp_viewporter"), 1)
+[2498592.613][rs] <- wl_registry@2.global, (30, Some("wp_single_pixel_buffer_manager_v1"), 1)
+[2498592.647][rs] <- wl_registry@2.global, (31, Some("wp_fractional_scale_manager_v1"), 1)
+[2498592.673][rs] <- wl_registry@2.global, (32, Some("ext_idle_notifier_v1"), 1)
+[2498592.698][rs] <- wl_registry@2.global, (33, Some("zwp_idle_inhibit_manager_v1"), 1)
+[2498592.733][rs] <- wl_registry@2.global, (34, Some("zwp_relative_pointer_manager_v1"), 1)
+[2498592.765][rs] <- wl_registry@2.global, (35, Some("zwp_pointer_constraints_v1"), 1)
+[2498592.789][rs] <- wl_registry@2.global, (36, Some("zwlr_foreign_toplevel_manager_v1"), 3)
+[2498592.817][rs] <- wl_registry@2.global, (37, Some("ext_foreign_toplevel_list_v1"), 1)
+[2498592.851][rs] <- wl_registry@2.global, (38, Some("ext_session_lock_manager_v1"), 1)
+[2498592.873][rs] <- wl_registry@2.global, (39, Some("wp_drm_lease_device_v1"), 1)
+[2498592.906][rs] <- wl_registry@2.global, (40, Some("zwlr_output_power_manager_v1"), 1)
+[2498592.930][rs] <- wl_registry@2.global, (41, Some("wp_tearing_control_manager_v1"), 1)
+[2498592.971][rs] <- wl_registry@2.global, (42, Some("zwp_tablet_manager_v2"), 1)
+[2498592.987][rs] <- wl_registry@2.global, (43, Some("zwlr_layer_shell_v1"), 4)
+[2498593.020][rs] <- wl_registry@2.global, (44, Some("zxdg_exporter_v1"), 1)
+[2498593.053][rs] <- wl_registry@2.global, (45, Some("zxdg_importer_v1"), 1)
+[2498593.079][rs] <- wl_registry@2.global, (46, Some("zxdg_exporter_v2"), 1)
+[2498593.116][rs] <- wl_registry@2.global, (47, Some("zxdg_importer_v2"), 1)
+[2498593.142][rs] <- wl_registry@2.global, (49, Some("wl_output"), 4)
+[2498593.169][rs] <- wl_callback@3.done, (1802)
+[2498593.187][rs] <- wl_display@1.delete_id, (3)
+[2498593.259][rs] -> wl_registry@2.bind(13, Some("zwp_input_method_manager_v2"), 1, zwp_input_method_manager_v2@3)
+[2498593.298][rs] -> wl_registry@2.bind(15, Some("wl_seat"), 9, wl_seat@4)
+[2498593.350][rs] -> wl_registry@2.bind(16, Some("zwlr_virtual_pointer_manager_v1"), 2, zwlr_virtual_pointer_manager_v1@5)
+[2498593.385][rs] -> wl_registry@2.bind(17, Some("zwp_virtual_keyboard_manager_v1"), 1, zwp_virtual_keyboard_manager_v1@6)
+[2498593.476][rs] -> wl_registry@2.bind(49, Some("wl_output"), 4, wl_output@7)
+[2498593.507][rs] -> wl_display@1.sync(wl_callback@8)
+[2498593.747][rs] <- wl_seat@4.name, (Some("seat0"))
+[2498593.774][rs] <- wl_seat@4.capabilities, (3)
+[2498593.790][rs] <- wl_output@7.geometry, (0, 0, 320, 200, 0, Some("Red Hat, Inc."), Some("QEMU Monitor"), 0)
+[2498593.828][rs] <- wl_output@7.mode, (1, 3840, 2160, 60000)
+[2498593.853][rs] <- wl_output@7.scale, (3)
+[2498593.869][rs] <- wl_output@7.name, (Some("Virtual-1"))
+[2498593.894][rs] <- wl_output@7.description, (Some("Red Hat, Inc. QEMU Monitor (Virtual-1)"))
+[2498593.911][rs] <- wl_output@7.done, ()
+[2498593.931][rs] <- wl_callback@8.done, (1802)
+[2498593.943][rs] <- wl_display@1.delete_id, (8)
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Received a seat event Name { name: "seat0" }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Received a seat event Capabilities { capabilities: Value(Capability(Pointer | Keyboard)) }
+[2498594.060][rs] -> wl_seat@4.get_keyboard(wl_keyboard@8)
+[2498594.089][rs] -> wl_seat@4.get_pointer(wl_pointer@9)
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] flags: Value(Mode(Current)), width: 3840, : 2160, refresh: 60000
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Scale { factor: 3 }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Name { name: "Virtual-1" }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Description { description: "Red Hat, Inc. QEMU Monitor (Virtual-1)" }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Done
+[2498594.265][rs] -> zwp_input_method_manager_v2@3.get_input_method(wl_seat@4, zwp_input_method_v2@10)
+[2498594.292][rs] -> zwp_virtual_keyboard_manager_v1@6.create_virtual_keyboard(wl_seat@4, zwp_virtual_keyboard_v1@11)
+[2498594.335][rs] -> zwlr_virtual_pointer_manager_v1@5.create_virtual_pointer(wl_seat@4, zwlr_virtual_pointer_v1@12)
+[2498594.360][rs] -> wl_display@1.sync(wl_callback@13)
+[2498595.764][rs] <- wl_keyboard@8.keymap, (1, 4, 67292)
+[2498595.802][rs] <- wl_keyboard@8.repeat_info, (25, 600)
+[2498595.815][rs] <- wl_keyboard@8.keymap, (1, 5, 67292)
+[2498595.832][rs] <- wl_keyboard@8.repeat_info, (25, 600)
+[2498595.849][rs] <- wl_callback@13.done, (1803)
+[2498595.869][rs] <- wl_display@1.delete_id, (13)
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a wl_keyboard event Keymap { format: Value(XkbV1), fd: OwnedFd { fd: 4 }, size: 67292 }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a wl_keyboard event RepeatInfo { rate: 25, delay: 600 }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a wl_keyboard event Keymap { format: Value(XkbV1), fd: OwnedFd { fd: 5 }, size: 67292 }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a wl_keyboard event RepeatInfo { rate: 25, delay: 600 }
+[2025-03-22T13:45:19Z DEBUG enigo::platform::wayland] protocols available
+    virtual_keyboard: true
+    input_method: true
+    virtual_pointer: true
+[2025-03-22T13:45:19Z DEBUG enigo::platform::keymap] regenerated the keymap
+[2498596.182][rs] -> zwp_virtual_keyboard_v1@11.keymap(1, 4, 7815)
+[2025-03-22T13:45:19Z DEBUG enigo::platform::wayland] wait for response after keymap call
+[2498596.283][rs] -> wl_display@1.sync(wl_callback@13)
+[2498596.926][rs] <- wl_keyboard@8.keymap, (1, 5, 7815)
+[2498596.987][rs] <- wl_callback@13.done, (1803)
+[2498597.001][rs] <- wl_display@1.delete_id, (13)
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a wl_keyboard event Keymap { format: Value(XkbV1), fd: OwnedFd { fd: 5 }, size: 7815 }
+[2025-03-22T13:45:19Z DEBUG enigo::platform] wayland connection established
+[2025-03-22T13:45:19Z DEBUG enigo::platform] fast_text(text: Hello World! here is a lot of text  ❤️)
+[2498597.148][rs] -> wl_display@1.sync(wl_callback@13)
+[2498606.057][rs] <- wl_callback@13.done, (1803)
+[2498606.113][rs] <- wl_display@1.delete_id, (13)
+[2498606.134][rs] <- zwp_input_method_v2@10.activate, ()
+[2498606.175][rs] <- zwp_input_method_v2@10.done, ()
+[2498606.209][rs] <- zwp_input_method_v2@10.text_change_cause, (0)
+[2498606.229][rs] <- zwp_input_method_v2@10.content_type, (0, 13)
+[2498606.254][rs] <- zwp_input_method_v2@10.done, ()
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a input method event Activate
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a input method event Done
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a input method event TextChangeCause { cause: Value(InputMethod) }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a input method event ContentType { hint: Value(ContentHint(0x0)), purpose: Value(Terminal) }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a input method event Done
+[2498606.629][rs] -> zwp_input_method_v2@10.commit_string(Some("Hello World! here is a lot of text  \xe2\x9d\xa4\xef\xb8\x8f"))
+[2498606.687][rs] -> zwp_input_method_v2@10.commit(2)
+[2025-03-22T13:45:19Z DEBUG enigo] fast text entry was successful
+[2025-03-22T13:45:19Z DEBUG enigo::platform] entered the text fast
+[2025-03-22T13:45:19Z DEBUG enigo] fast text entry was successful
+[2025-03-22T13:45:19Z DEBUG enigo::platform] key(key: Control, direction: Press)
+[2498606.881][rs] -> zwp_virtual_keyboard_v1@11.modifiers(4, 0, 0, 0)
+[2025-03-22T13:45:19Z DEBUG enigo::platform] entered the key via wayland
+[2025-03-22T13:45:19Z DEBUG enigo::platform] added the key Control to the held keys
+[2025-03-22T13:45:19Z DEBUG enigo::platform] entered the key
+[2025-03-22T13:45:19Z DEBUG enigo::platform] key(key: Unicode('a'), direction: Click)
+[2025-03-22T13:45:19Z DEBUG enigo::platform::keymap] mapped keycode 8 to keysym XK_a
+[2025-03-22T13:45:19Z DEBUG enigo::platform::keymap] regenerated the keymap
+[2498607.238][rs] -> zwp_virtual_keyboard_v1@11.keymap(1, 4, 7866)
+[2025-03-22T13:45:19Z DEBUG enigo::platform::wayland] wait for response after keymap call
+[2498607.293][rs] -> wl_display@1.sync(wl_callback@13)
+[2498608.221][rs] <- wl_keyboard@8.modifiers, (1805, 4, 0, 0, 0)
+[2498608.272][rs] <- wl_keyboard@8.keymap, (1, 5, 7866)
+[2498608.291][rs] <- wl_callback@13.done, (1808)
+[2498608.333][rs] <- wl_display@1.delete_id, (13)
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a wl_keyboard event Modifiers { serial: 1805, mods_depressed: 4, mods_latched: 0, mods_locked: 0, group: 0 }
+[2025-03-22T13:45:19Z WARN  enigo::platform::wayland] Got a wl_keyboard event Keymap { format: Value(XkbV1), fd: OwnedFd { fd: 5 }, size: 7866 }
+[2498608.497][rs] -> zwp_virtual_keyboard_v1@11.key(14, 0, 1)
+[2498608.544][rs] -> zwp_virtual_keyboard_v1@11.key(14, 0, 0)
+[2025-03-22T13:45:19Z DEBUG enigo::platform] entered the key via wayland
+[2025-03-22T13:45:19Z DEBUG enigo::platform] entered the key
+[2025-03-22T13:45:19Z DEBUG enigo::platform] key(key: Control, direction: Release)
+[2498608.629][rs] -> zwp_virtual_keyboard_v1@11.modifiers(0, 0, 0, 0)
+[2025-03-22T13:45:19Z DEBUG enigo::platform] entered the key via wayland
+[2025-03-22T13:45:19Z DEBUG enigo::platform] removed the key Control from the held keys
+[2025-03-22T13:45:19Z DEBUG enigo::platform] entered the key
+[2025-03-22T13:45:19Z DEBUG enigo::platform] released all held keys and held keycodes
+[2498608.732][rs] -> zwp_virtual_keyboard_v1@11.destroy()
+[2498608.757][rs] -> zwp_input_method_v2@10.destroy()
+[2498608.779][rs] -> zwlr_virtual_pointer_v1@12.destroy()
+[2498608.822][rs] -> wl_display@1.sync(wl_callback@13)
+[2498608.921][rs] <- wl_display@1.delete_id, (11)
+[2498608.941][rs] <- wl_display@1.delete_id, (10)
+[2498608.972][rs] <- wl_display@1.delete_id, (12)
+[2498608.997][rs] <- wl_callback@13.done, (1810)
+[2498609.013][rs] <- wl_display@1.delete_id, (13)
+[pentamassiv@archlinuxvm enigo]$ Hello World! here is a lot of text  ❤️a

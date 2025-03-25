@@ -54,4 +54,5 @@ fn integration_browser_events() {
 
     enigo.main_display().unwrap();
     enigo.location().unwrap();
+    panic!("explicat panic. Remove before merging");
 }

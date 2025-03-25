@@ -86,15 +86,21 @@ jobs:
 
       # Launch Firefox in kiosk mode
       - name: Launch Firefox in kiosk mode
+        if: runner.os != 'Windows'
         run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            cmd.exe /C start "" firefox --kiosk "file://%CD%/tests/index.html"
-          elif [ "$RUNNER_OS" == "macOS" ]; then
+         if [ "$RUNNER_OS" == "macOS" ]; then
             open -a "/Applications/Firefox.app" --args --kiosk "file://$(pwd)/tests/index.html" &
           else
             firefox --kiosk "file://$(pwd)/tests/index.html" &
           fi
           sleep 30
+
+      # Launch Firefox in kiosk mode on Windows
+      - name: Launch Firefox in kiosk mode on Windows
+        if: runner.os == 'Windows'
+        run: |
+          cmd /C start firefox --kiosk "file://%CD%/tests/index.html"
+        shell: cmd
       
 
       - name: Take screenshot

@@ -97,7 +97,6 @@ jobs:
           sleep 10
 
       - name: Take screenshot
-        if: always() && runner.os != 'macOS'
         uses: ./.github/actions/screenshot
         with:
           platform: ${{ matrix.platform }}

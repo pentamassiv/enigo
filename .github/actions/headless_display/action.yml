@@ -9,11 +9,11 @@ runs:
       run: |
           sudo apt-get install -y xvfb
           which Xvfb
+          # Set DISPLAY env variable
+          echo "DISPLAY=:99.0" >> $GITHUB_ENV
           # Create Xauthority file
           touch ~/.Xauthority
           xauth generate $DISPLAY . trusted
-          # Set DISPLAY env variable
-          echo "DISPLAY=:99.0" >> $GITHUB_ENV
           # Create virtual display with Xvfb
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
           # Wait for Xvfb to start

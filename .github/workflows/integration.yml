@@ -96,6 +96,14 @@ jobs:
           fi
           sleep 10
 
+      - name: Take screenshot
+        if: always() && runner.os != 'macOS'
+        uses: ./.github/actions/screenshot
+        with:
+          platform: ${{ matrix.platform }}
+          rust: ${{ matrix.rust }}
+          feature: ${{ matrix.features }}
+
       - name: Run integration tests in release mode
         if: matrix.features != 'wayland' && matrix.features != 'libei' && matrix.features != 'libei,wayland,xdo,x11rb' # On Linux, the integration tests only work with X11 for now
         run: $XTRACE_PREFIX cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored

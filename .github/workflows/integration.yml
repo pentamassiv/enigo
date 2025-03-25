@@ -90,7 +90,7 @@ jobs:
           if [ "$RUNNER_OS" == "Windows" ]; then
             cmd.exe /C "start firefox --kiosk \"file://%CD%/tests/index.html\""
           elif [ "$RUNNER_OS" == "macOS" ]; then
-            open -a "Firefox" --args --kiosk "file://$(pwd)/tests/index.html" &
+            open -a "/Applications/Firefox.app" --args --kiosk "file://$(pwd)/tests/index.html" &
           else
             firefox --kiosk "file://$(pwd)/tests/index.html" &
           fi

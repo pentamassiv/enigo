@@ -25,11 +25,10 @@ impl EnigoTest {
     pub fn new(settings: &Settings) -> Self {
         env_logger::try_init().ok();
         EnigoTest::start_timeout_thread();
-        let enigo = Enigo::new(settings).unwrap();
+        let mut enigo = Enigo::new(settings).unwrap();
+        enigo.button(Button::Left, Click).unwrap();
         let websocket = Self::websocket();
-        let mut enigo_test = Self { enigo, websocket };
-        enigo_test.button(Button::Left, Press).unwrap();
-        enigo_test
+        Self { enigo, websocket }
     }
 
     fn websocket() -> tungstenite::WebSocket<TcpStream> {

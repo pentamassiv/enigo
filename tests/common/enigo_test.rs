@@ -28,6 +28,7 @@ impl EnigoTest {
         let mut enigo = Enigo::new(settings).unwrap();
         enigo.button(Button::Left, Click).unwrap();
         let websocket = Self::websocket();
+        std::thread::sleep(std::time::Duration::from_secs(10));
         Self { enigo, websocket }
     }
 

@@ -3,7 +3,7 @@ use std::net::{TcpListener, TcpStream};
 use tungstenite::accept;
 
 use enigo::{
-    Axis, Coordinate,
+    Axis, Button, Coordinate,
     Direction::{self, Click, Press, Release},
     Enigo, Key, Keyboard, Mouse, Settings,
 };
@@ -27,9 +27,9 @@ impl EnigoTest {
         EnigoTest::start_timeout_thread();
         let enigo = Enigo::new(settings).unwrap();
         let websocket = Self::websocket();
-
-        std::thread::sleep(std::time::Duration::from_secs(10)); // Give Firefox some time to launch
-        Self { enigo, websocket }
+        let mut enigo_test = Self { enigo, websocket };
+        enigo_test.button(Button::Left, Press).unwrap();
+        enigo_test
     }
 
     fn websocket() -> tungstenite::WebSocket<TcpStream> {

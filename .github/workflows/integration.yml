@@ -94,7 +94,7 @@ jobs:
           else
             firefox --kiosk "file://$(pwd)/tests/index.html" &
           fi
-          sleep 10
+          sleep 30
 
       - name: Take screenshot
         uses: ./.github/actions/screenshot

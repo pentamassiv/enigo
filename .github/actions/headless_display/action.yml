@@ -12,11 +12,11 @@ runs:
           # Set DISPLAY env variable
           export DISPLAY=:99.0
           echo "$DISPLAY" >> $GITHUB_ENV
+          # Create virtual display with Xvfb
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
           # Create Xauthority file
           touch ~/.Xauthority
           xauth generate $DISPLAY . trusted
-          # Create virtual display with Xvfb
-          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
           # Wait for Xvfb to start
           sleep 3
       shell: bash

@@ -115,7 +115,7 @@ jobs:
         run: $XTRACE_PREFIX cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored
       
       - name: Take screenshot
-        if: always() && runner.os != 'macOS'
+        if: always()
         uses: ./.github/actions/screenshot
         with:
           platform: ${{ matrix.platform }}

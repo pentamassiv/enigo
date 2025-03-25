@@ -10,13 +10,13 @@ runs:
           sudo apt-get install -y xvfb
           which Xvfb
           # Set DISPLAY env variable
-          export DISPLAY=:99.0
-          echo "$DISPLAY" >> $GITHUB_ENV
+          export DISPLAY=:99
+          echo "DISPLAY=:99" >> $GITHUB_ENV
           # Create virtual display with Xvfb
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-          # Create Xauthority file
-          touch ~/.Xauthority
-          xauth generate $DISPLAY . trusted
           # Wait for Xvfb to start
           sleep 3
+          # Create Xauthority file and generate X authentication data
+          touch ~/.Xauthority
+          xauth generate $DISPLAY . trusted
       shell: bash

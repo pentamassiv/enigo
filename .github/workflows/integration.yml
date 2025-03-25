@@ -88,13 +88,14 @@ jobs:
       - name: Launch Firefox in kiosk mode
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
-            cmd.exe /C "start firefox --kiosk \"file://%CD%/tests/index.html\""
+            cmd.exe /C start "" firefox --kiosk "file://%CD%/tests/index.html"
           elif [ "$RUNNER_OS" == "macOS" ]; then
             open -a "/Applications/Firefox.app" --args --kiosk "file://$(pwd)/tests/index.html" &
           else
             firefox --kiosk "file://$(pwd)/tests/index.html" &
           fi
           sleep 30
+      
 
       - name: Take screenshot
         uses: ./.github/actions/screenshot

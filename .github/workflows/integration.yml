@@ -64,7 +64,8 @@ jobs:
     steps:
       - name: Set XTRACE_PREFIX
         if: runner.os == 'Linux'
-        run: echo "XTRACE_PREFIX='xtrace --waitforclient --stopwhendone '" >> $GITHUB_ENV
+        run: echo "XTRACE_PREFIX=xtrace --waitforclient --stopwhendone" >> $GITHUB_ENV
+
       - uses: actions/checkout@v4
         with:
           # If manually triggered, use the current commit (GITHUB_SHA), otherwise use the head_sha from the Build workflow
@@ -76,14 +77,25 @@ jobs:
           components: rustfmt, clippy
 
       - name: Setup headless display for tests on Linux
-        if: runner.os == 'Linux' # This step is only needed on Linux. The other OSs don't need to be set up
+        if: runner.os == 'Linux'
         uses: ./.github/actions/headless_display
 
       - name: Install Firefox on macOS
         if: runner.os == 'macOS'
         run: brew install --cask firefox
 
+      # Launch Firefox in kiosk mode
+      - name: Launch Firefox in kiosk mode
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            cmd.exe /C "start firefox --kiosk \"file://%CD%/tests/index.html\""
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            open -a "Firefox" --args --kiosk "file://$(pwd)/tests/index.html" &
+          else
+            firefox --kiosk "file://$(pwd)/tests/index.html" &
+          fi
+          sleep 10
 
       - name: Run integration tests in release mode
         if: matrix.features != 'wayland' && matrix.features != 'libei' && matrix.features != 'libei,wayland,xdo,x11rb' # On Linux, the integration tests only work with X11 for now
-        run: xtrace  --waitforclient --stopwhendone cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored
+        run: $XTRACE_PREFIX cargo test integration --release --no-default-features --features ${{ matrix.features }} -- --test-threads=1 --nocapture --include-ignored

@@ -26,7 +26,6 @@ impl EnigoTest {
         env_logger::try_init().ok();
         EnigoTest::start_timeout_thread();
         let enigo = Enigo::new(settings).unwrap();
-        let _ = &*super::browser::BROWSER_INSTANCE; // Launch Firefox
         let websocket = Self::websocket();
 
         std::thread::sleep(std::time::Duration::from_secs(10)); // Give Firefox some time to launch

@@ -14,7 +14,6 @@ use nom::{
     sequence::{delimited, pair, separated_pair, terminated},
     {IResult, Parser},
 };
-use ron::to_string;
 
 type Keycode = u32;
 
@@ -54,6 +53,7 @@ struct Keycodes {
     minimum: Keycode,
     maximum: Keycode,
     keycodes: Vec<KeycodeEntry>,
+    max_len_identifier: usize, // Max length of all identifiers
     indicators: Vec<IndicatorEntry>,
     aliases: Vec<AliasEntry>,
 }
@@ -64,6 +64,9 @@ impl Display for Keycodes {
         writeln!(f, "    minimum = {};", self.minimum)?;
         writeln!(f, "    maximum = {};", self.maximum)?;
         for keycode in &self.keycodes {
+            for _ in keycode.identifier.identifier.len()..self.max_len_identifier {
+                write!(f, " ")?;
+            }
             writeln!(f, "    {keycode}")?;
         }
         for indicators in &self.indicators {
@@ -90,6 +93,11 @@ impl Parse for Keycodes {
         ));
         let (remaining, (minimum, maximum, keycodes, indicators, aliases)) =
             terminated(content_parser, ws(tag("};"))).parse(remaining)?;
+
+        let mut max_len_identifier = 0;
+        for KeycodeEntry { identifier, .. } in &keycodes {
+            max_len_identifier = max_len_identifier.max(identifier.identifier.len())
+        }
         Ok((
             remaining,
             Keycodes {
@@ -97,6 +105,7 @@ impl Parse for Keycodes {
                 minimum,
                 maximum,
                 keycodes,
+                max_len_identifier,
                 indicators,
                 aliases,
             },
@@ -112,12 +121,6 @@ struct KeycodeEntry {
 
 impl Display for KeycodeEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: Replace with
-        // write!(f, "{:>11} = {};", self.identifier, self.code)
-        // The above statement did not leftpad at all
-        for _ in self.identifier.identifier.len()..4 {
-            write!(f, " ")?;
-        }
         write!(f, "{} = {};", self.identifier, self.code)
     }
 }
@@ -235,10 +238,7 @@ impl Display for Symbols {
         for (key_id, key_def) in &self.keys {
             write!(f, "    key ")?;
             // Leftpad
-            for _ in 0..(self
-                .max_len_identifier
-                .saturating_sub(key_id.identifier.len()))
-            {
+            for _ in key_id.identifier.len()..self.max_len_identifier {
                 write!(f, " ")?;
             }
             writeln!(f, "{key_id} {key_def};")?;
@@ -513,6 +513,7 @@ mod tests {
             minimum: 8,
             maximum: 255,
             keycodes: correct_keycodes,
+            max_len_identifier: 4,
             indicators: correct_indicators,
             aliases: correct_aliases,
         };

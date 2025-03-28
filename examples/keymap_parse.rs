@@ -1,18 +1,17 @@
 use std::fmt::Display;
-use std::fs;
-use std::path::Path;
 
 use nom::{
+    IResult, Parser,
     branch::permutation,
     bytes::complete::{tag, take_until},
     character::{
         complete::{char, multispace0},
         streaming::u32,
     },
+    combinator::opt,
     error::ParseError,
     multi::many0,
-    sequence::{delimited, pair, separated_pair, terminated},
-    {IResult, Parser},
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 
 type Keycode = u32;
@@ -27,23 +26,69 @@ trait Parse {
 struct Keymap {
     keycodes: Keycodes,
     // Don't parse this, just keep it as is
-    types: String,
+    types: Option<String>,
     // Don't parse this, just keep it as is
-    compatibility: String,
+    compatibility: Option<String>,
     symbols: Symbols,
     // Don't parse this, just keep it as is
-    geometry: String,
+    geometry: Option<String>,
 }
 
 impl Display for Keymap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "xkb_keymap {{")?;
-        write!(
-            f,
-            "{}{}{}{}{}",
-            self.keycodes, self.types, self.compatibility, self.symbols, self.geometry
-        )?;
+        write!(f, "{}\n", self.keycodes)?;
+        if let Some(types) = &self.types {
+            write!(f, "xkb_types {types}\n}};\n\n",)?;
+        }
+        if let Some(compatibility) = &self.compatibility {
+            write!(f, "xkb_compatibility {compatibility}\n}};\n\n")?;
+        }
+        write!(f, "{}\n", self.symbols)?;
+
+        if let Some(geometry) = &self.geometry {
+            write!(f, "xkb_geometry {geometry}\n}};\n\n")?;
+        }
         writeln!(f, "}};")
+    }
+}
+
+impl Parse for Keymap {
+    fn parse(input: &str) -> IResult<&str, Self> {
+        let types_parser = delimited(ws(tag("xkb_types")), take_until("\n};\n"), tag("\n};\n"))
+            .map(|s: &str| s.to_string());
+        let compatibility_parser = delimited(
+            ws(tag("xkb_compatibility")),
+            take_until("\n};\n"),
+            tag("\n};\n"),
+        )
+        .map(|s: &str| s.to_string());
+        let geometry_parser =
+            delimited(ws(tag("xkb_geometry")), take_until("\n};\n"), tag("\n};\n"))
+                .map(|s: &str| s.to_string());
+        let content_parser = permutation((
+            Keycodes::parse,
+            opt(types_parser),
+            opt(compatibility_parser),
+            Symbols::parse,
+            opt(geometry_parser),
+        ));
+        let mut keymap_parser = preceded(pair(ws(tag("xkb_keymap")), tag("{\n")), content_parser);
+
+        let (remaining, (keycodes, types, compatibility, symbols, geometry)) =
+            keymap_parser.parse(input)?;
+        let (remaining, _) = preceded(multispace0, tag("};\n")).parse(remaining)?;
+
+        Ok((
+            remaining,
+            Self {
+                keycodes,
+                types,
+                compatibility,
+                symbols,
+                geometry,
+            },
+        ))
     }
 }
 
@@ -232,7 +277,7 @@ impl Display for Symbols {
         writeln!(f, "xkb_symbols {} {{", self.name)?;
         writeln!(f, "")?;
         for (idx, group) in self.groups.iter().enumerate() {
-            writeln!(f, "    name[group{idx}]={group};")?;
+            writeln!(f, "    name[group{}]={group};", idx + 1)?;
         }
         writeln!(f, "")?;
         for (key_id, key_def) in &self.keys {
@@ -307,19 +352,12 @@ where
     delimited(multispace0, inner, multispace0)
 }
 
-fn read_xkb_file<P: AsRef<Path>>(path: P) -> std::io::Result<String> {
-    fs::read_to_string(path)
-}
-
 fn main() {
-    let test = "a";
-    println!("{:>11}", test);
-    println!("{}", test);
-
-    "".to_string();
-
-    let formatted_id = format!("{:>21}", test);
-    print!("{} = 3;", formatted_id);
+    let keymap_str = std::fs::read_to_string("keymap.txt").unwrap();
+    let (remaining, keymap) = Keymap::parse(&keymap_str).unwrap();
+    println!("remaining:\n{remaining}");
+    let keymap_serialized = format!("{keymap}");
+    assert_eq!(keymap_str, keymap_serialized);
 }
 
 #[cfg(test)]

@@ -208,7 +208,17 @@ struct AliasEntry {
 
 impl Display for AliasEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "alias {} = {};", self.alias, self.name)
+        write!(f, "alias ")?;
+
+        for _ in self.alias.identifier.len()..4 {
+            write!(f, " ")?;
+        }
+        write!(f, "{} = ", self.alias)?;
+
+        for _ in self.name.identifier.len()..4 {
+            write!(f, " ")?;
+        }
+        write!(f, "{};", self.name)
     }
 }
 

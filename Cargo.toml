@@ -100,6 +100,7 @@ strum = "0.27"
 strum_macros = "0.27"
 rdev = "0.5"                                     # Test the main_display() function
 mouse_position = "0.1"                           # Test the location() function
+nom = "8.0"
 
 [[example]]
 name = "serde"

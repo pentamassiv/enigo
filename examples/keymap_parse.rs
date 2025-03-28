@@ -2,15 +2,19 @@ use std::fmt::Display;
 use std::fs;
 use std::path::Path;
 
-use nom::branch::permutation;
-use nom::bytes::complete::{is_not, tag, take_until};
-use nom::character::complete::{alphanumeric0, multispace0};
-use nom::character::complete::{char, digit1};
-use nom::character::streaming::u32;
-use nom::error::ParseError;
-use nom::multi::many0;
-use nom::sequence::{delimited, pair, separated_pair, terminated};
-use nom::{IResult, Parser};
+use nom::{
+    branch::permutation,
+    bytes::complete::{tag, take_until},
+    character::{
+        complete::{char, multispace0},
+        streaming::u32,
+    },
+    error::ParseError,
+    multi::many0,
+    sequence::{delimited, pair, separated_pair, terminated},
+    {IResult, Parser},
+};
+use ron::to_string;
 
 type Keycode = u32;
 
@@ -214,8 +218,9 @@ impl Parse for Identifier {
 #[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
 struct Symbols {
     name: Name,
-    groups: Vec<String>,
-    keys: Vec<String>,
+    groups: Vec<Name>,
+    keys: Vec<(Identifier, String)>,
+    max_len_identifier: usize, // Max length of all identifiers
     modifier_map: Vec<String>,
 }
 
@@ -224,16 +229,67 @@ impl Display for Symbols {
         writeln!(f, "xkb_symbols {} {{", self.name)?;
         writeln!(f, "")?;
         for (idx, group) in self.groups.iter().enumerate() {
-            writeln!(f, "    name[group{idx}]=\"{group}\";")?;
+            writeln!(f, "    name[group{idx}]={group};")?;
         }
         writeln!(f, "")?;
-        for key in &self.keys {
-            writeln!(f, "    key {key}")?;
+        for (key_id, key_def) in &self.keys {
+            write!(f, "    key ")?;
+            // Leftpad
+            for _ in 0..(self
+                .max_len_identifier
+                .saturating_sub(key_id.identifier.len()))
+            {
+                write!(f, " ")?;
+            }
+            writeln!(f, "{key_id} {key_def};")?;
         }
         for mod_map in &self.modifier_map {
-            writeln!(f, "    modifier_map {mod_map}")?;
+            writeln!(f, "    modifier_map {mod_map};")?;
         }
         writeln!(f, "}};")
+    }
+}
+
+impl Parse for Symbols {
+    fn parse(input: &str) -> IResult<&str, Self> {
+        let (remaining, name) = parse_section(input, "xkb_symbols").unwrap();
+        let groups_parser = delimited(
+            pair(ws(tag("name")), take_until("\"")),
+            Name::parse,
+            ws(tag(";")),
+        );
+        let key_parser = delimited(
+            ws(tag("key ")),
+            pair(ws(Identifier::parse), take_until(";")),
+            ws(tag(";")),
+        )
+        .map(|(id, s)| (id, s.to_string()));
+        let modifier_map_parser =
+            delimited(ws(tag("modifier_map ")), take_until(";"), ws(tag(";")))
+                .map(|s| s.to_string());
+        let content_parser = permutation((
+            many0(groups_parser),
+            many0(key_parser),
+            many0(modifier_map_parser),
+        ));
+
+        let (remaining, (groups, keys, modifier_map)) =
+            terminated(content_parser, ws(tag("};"))).parse(remaining)?;
+
+        let mut max_len_identifier = 0;
+        for (key_id, _) in &keys {
+            max_len_identifier = max_len_identifier.max(key_id.identifier.len())
+        }
+        Ok((
+            remaining,
+            Symbols {
+                name,
+                groups,
+                keys,
+                max_len_identifier,
+                modifier_map,
+            },
+        ))
     }
 }
 
@@ -259,6 +315,8 @@ fn main() {
     let test = "a";
     println!("{:>11}", test);
     println!("{}", test);
+
+    "".to_string();
 
     let formatted_id = format!("{:>21}", test);
     print!("{} = 3;", formatted_id);
@@ -940,5 +998,95 @@ mod tests {
         for (name_str, correct_name) in &test_cases {
             assert_eq!(Name::parse(name_str), *correct_name);
         }
+    }
+
+    #[test]
+    fn test_parse_symbols() {
+        let symbols_str = r#"
+xkb_symbols "(unnamed)" {
+
+    name[group1]="German";
+    name[group2]="English (UK)";
+
+    key     <> {         [           U8A9E ] };
+    key  <ESC> {         [          Escape ] };
+    key <AC11> {
+        type[group1]= "FOUR_LEVEL_SEMIALPHABETIC",
+        type[group2]= "FOUR_LEVEL",
+        symbols[Group1]= [      adiaeresis,      Adiaeresis, dead_circumflex,      dead_caron ],
+        symbols[Group2]= [      apostrophe,              at, dead_circumflex,      dead_caron ]
+    };
+    key <KPSU> {
+        type= "CTRL+ALT",
+        symbols[Group1]= [     KP_Subtract,     KP_Subtract,     KP_Subtract,     KP_Subtract,  XF86Prev_VMode ]
+    };
+    key <FK23> {
+        type= "PC_SHIFT_SUPER_LEVEL2",
+        symbols[Group1]= [ XF86TouchpadOff,   XF86Assistant ]
+    };
+    key <LVL5> {         [ ISO_Level5_Shift ] };
+    key  <ALT> {         [        NoSymbol,           Alt_L ] };
+    key <I208> {         [   XF86AudioPlay ] };
+    key <I209> {         [  XF86AudioPause ] };
+    modifier_map Control { <LCTL> };
+    modifier_map Shift { <LFSH> };
+    modifier_map Shift { <RTSH> };
+    modifier_map Mod1 { <LALT> };
+    modifier_map Lock { <CAPS> };
+    modifier_map Control { <RCTL> };
+    modifier_map Mod4 { <LWIN> };
+    modifier_map Mod4 { <RWIN> };
+};"#;
+
+        let correct_symbols = Symbols {
+            name: Name {
+                name: "(unnamed)".to_string(),
+            },
+            groups: vec![
+                Name {
+                    name: "German".to_string(),
+                },
+                Name {
+                    name: "English (UK)".to_string(),
+                },
+            ],
+            keys: vec![(Identifier{ identifier: "".to_string() },"{         [           U8A9E ] }".to_string()),
+    (Identifier{ identifier: "ESC".to_string() },"{         [          Escape ] }".to_string()),
+    (Identifier{ identifier: "AC11".to_string() },"{
+        type[group1]= \"FOUR_LEVEL_SEMIALPHABETIC\",
+        type[group2]= \"FOUR_LEVEL\",
+        symbols[Group1]= [      adiaeresis,      Adiaeresis, dead_circumflex,      dead_caron ],
+        symbols[Group2]= [      apostrophe,              at, dead_circumflex,      dead_caron ]
+    }".to_string()),
+    (Identifier{ identifier: "KPSU".to_string() },"{
+        type= \"CTRL+ALT\",
+        symbols[Group1]= [     KP_Subtract,     KP_Subtract,     KP_Subtract,     KP_Subtract,  XF86Prev_VMode ]
+    }".to_string()),
+    (Identifier{ identifier: "FK23".to_string() },"{
+        type= \"PC_SHIFT_SUPER_LEVEL2\",
+        symbols[Group1]= [ XF86TouchpadOff,   XF86Assistant ]
+    }".to_string()),
+    (Identifier{ identifier: "LVL5".to_string() },"{         [ ISO_Level5_Shift ] }".to_string()),
+    (Identifier{ identifier: "ALT".to_string() },"{         [        NoSymbol,           Alt_L ] }".to_string()),
+    (Identifier{ identifier: "I208".to_string() },"{         [   XF86AudioPlay ] }".to_string()),
+    (Identifier{ identifier: "I209".to_string() },"{         [  XF86AudioPause ] }".to_string()),
+
+
+
+            ],
+            max_len_identifier:4,
+            modifier_map: vec![r#"Control { <LCTL> }"#.to_string(),
+    r#"Shift { <LFSH> }"#.to_string(),
+    r#"Shift { <RTSH> }"#.to_string(),
+    r#"Mod1 { <LALT> }"#.to_string(),
+    r#"Lock { <CAPS> }"#.to_string(),
+    r#"Control { <RCTL> }"#.to_string(),
+    r#"Mod4 { <LWIN> }"#.to_string(),
+    r#"Mod4 { <RWIN> }"#.to_string()],
+        };
+
+        println!("{correct_symbols}");
+
+        assert_eq!(Symbols::parse(symbols_str), Ok(("", correct_symbols)));
     }
 }

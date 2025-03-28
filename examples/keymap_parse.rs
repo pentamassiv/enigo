@@ -92,6 +92,12 @@ impl Parse for Keymap {
     }
 }
 
+/// The keycodes component of a keyboard mapping specifies the range and
+/// interpretation of the raw keycodes reported by the device. It sets the
+/// keycodes symbolic name, the minimum and maximum legal codes for the
+/// keyboard, and the symbolic name for each key. The keycodes component might
+/// also contain aliases for some keys, symbolic names for some indicators and a
+/// description of which indicators are physically present.
 #[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
 struct Keycodes {
     name: Name,
@@ -363,7 +369,7 @@ where
 }
 
 fn main() {
-    let keymap_str = std::fs::read_to_string("keymap.txt").unwrap();
+    let keymap_str = std::fs::read_to_string("/usr/share/X11/xkb/keymaps/evdev").unwrap();
     let (remaining, keymap) = Keymap::parse(&keymap_str).unwrap();
     println!("remaining:\n{remaining}");
     let keymap_serialized = format!("{keymap}");

@@ -573,7 +573,10 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
                             state.seat_keymap = None
                         }
                     }
-                    None => state.seat_keymap = Keymap2::new(format, fd, size).ok(),
+                    None => {
+                        let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+                        state.seat_keymap = Keymap2::new(context, format, fd, size).ok()
+                    }
                 }
             }
             // On Wayland the clients only get notified about pressed keys or modifiers if they have

@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use log::{error, warn};
 use nom::{
     IResult, Parser,
     branch::permutation,
@@ -32,6 +33,34 @@ pub(crate) struct ParsedKeymap {
     symbols: Symbols,
     // Don't parse this, just keep it as is
     geometry: Option<String>,
+}
+
+impl TryFrom<&mut std::fs::File> for ParsedKeymap {
+    type Error = ();
+
+    fn try_from(keymap_file: &mut std::fs::File) -> Result<Self, Self::Error> {
+        use std::io::{Read, Seek, SeekFrom};
+
+        // Read keymap to String
+        let mut keymap_str = String::new();
+        keymap_file.read_to_string(&mut keymap_str).map_err(|e| {
+            error!("unable to read file to string:\n{e}");
+        })?;
+
+        // Reset the cursor to the beginning of the file.
+        keymap_file.seek(SeekFrom::Start(0)).map_err(|e| {
+            error!("unable to seek from the start:\n{e}");
+        })?;
+
+        // Parse the keymap
+        let (remaining, parsed_keymap) = ParsedKeymap::parse(&keymap_str).map_err(|_| {
+            error!("parsing keymap failed");
+        })?;
+        if !remaining.is_empty() {
+            warn!("not all of the keymap could be parsed")
+        }
+        Ok(parsed_keymap)
+    }
 }
 
 impl Display for ParsedKeymap {

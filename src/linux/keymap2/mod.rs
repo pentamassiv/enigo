@@ -1,15 +1,14 @@
 use std::{fs::File, os::fd::OwnedFd};
 
-use log::{debug, error, warn};
+use log::{debug, error, trace};
 use xkbcommon::xkb::{
-    CONTEXT_NO_FLAGS, Context, KEYMAP_COMPILE_NO_FLAGS, KeyDirection, Keycode, Keymap,
-    KeymapFormat, State,
+    Context, KEYMAP_COMPILE_NO_FLAGS, KeyDirection, Keycode, Keymap, KeymapFormat, State,
 };
 
 use crate::{InputResult, Key, keycodes::ModifierBitflag};
 
 mod parse_keymap;
-use parse_keymap::{Parse as _, ParsedKeymap};
+use parse_keymap::ParsedKeymap;
 
 #[derive(Clone)]
 pub struct Keymap2 {
@@ -20,33 +19,14 @@ pub struct Keymap2 {
 }
 
 impl Keymap2 {
-    pub fn new(format: KeymapFormat, fd: OwnedFd, size: u32) -> Result<Self, ()> {
-        use std::io::{Read, Seek, SeekFrom};
-
+    pub fn new(context: Context, format: KeymapFormat, fd: OwnedFd, size: u32) -> Result<Self, ()> {
         debug!("creating new xkb:Keymap");
 
-        // Read keymap to String
         let mut keymap_file = File::from(fd);
-        let mut keymap_str = String::new();
-        keymap_file.read_to_string(&mut keymap_str).map_err(|e| {
-            error!("unable to read file to string:\n{e}");
+        let parsed_keymap = ParsedKeymap::try_from(&mut keymap_file).map_err(|_| {
+            trace!("unable to parse the new keymap");
         })?;
-
-        // Reset the cursor to the beginning of the file.
-        keymap_file.seek(SeekFrom::Start(0)).map_err(|e| {
-            error!("unable to seek from the start:\n{e}");
-        })?;
-
-        // Parse the keymap
-        let (remaining, parsed_keymap) = ParsedKeymap::parse(&keymap_str).map_err(|_| {
-            error!("parsing keymap failed");
-        })?;
-        if !remaining.is_empty() {
-            warn!("not all of the keymap could be parsed")
-        }
-
-        let context = Context::new(CONTEXT_NO_FLAGS);
-        let keymap = Self::new_keymap(&context, format, &mut keymap_file, size)?;
+        let keymap = Self::new_xkb_keymap(&context, format, &mut keymap_file, size)?;
         let state = State::new(&keymap);
 
         Ok(Self {
@@ -58,8 +38,12 @@ impl Keymap2 {
     }
 
     pub fn update(&mut self, format: KeymapFormat, fd: OwnedFd, size: u32) -> Result<(), ()> {
-        let xkb_keymap = Self::new_keymap(&self.context, format, fd, size);
-        self.keymap = xkb_keymap;
+        let new_keymap = Self::new(self.context.clone(), format, fd, size).map_err(|_| {
+            trace!("unable to create new keymap");
+        })?;
+
+        // TODO: update the state here
+
         todo!()
     }
 
@@ -93,7 +77,7 @@ impl Keymap2 {
         todo!()
     }
 
-    fn new_keymap(
+    fn new_xkb_keymap(
         context: &Context,
         format: KeymapFormat,
         keymap_file: &mut File,

@@ -26,6 +26,7 @@ use wayland_protocols_misc::{
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
     zwlr_virtual_pointer_manager_v1, zwlr_virtual_pointer_v1,
 };
+use xkbcommon::xkb;
 
 use super::keymap::{Bind, KeyMap};
 use crate::{
@@ -340,7 +341,7 @@ impl Drop for Con {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone)]
 /// Stores the manager for the various protocols
 struct WaylandState {
     // interface name, global id, version
@@ -353,9 +354,33 @@ struct WaylandState {
     im_serial: Wrapping<u32>,
     pointer_manager: Option<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1>,
     virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
+    xkb_context: xkb::Context,
     seat: Option<wl_seat::WlSeat>,
     seat_keyboard: Option<WlKeyboard>,
+    seat_keymap: Option<(xkb::Keymap, xkb::State)>,
     seat_pointer: Option<WlPointer>,
+}
+
+// Derive Default if https://github.com/rust-x-bindings/xkbcommon-rs/pull/62 gets merged and a new version is published
+impl Default for WaylandState {
+    fn default() -> Self {
+        Self {
+            xkb_context: xkb::Context::new(xkb::CONTEXT_NO_FLAGS),
+            globals: Default::default(),
+            outputs: Default::default(),
+            keyboard_manager: Default::default(),
+            virtual_keyboard: Default::default(),
+            im_manager: Default::default(),
+            input_method: Default::default(),
+            im_serial: Default::default(),
+            pointer_manager: Default::default(),
+            virtual_pointer: Default::default(),
+            seat: Default::default(),
+            seat_keyboard: Default::default(),
+            seat_keymap: Default::default(),
+            seat_pointer: Default::default(),
+        }
+    }
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
@@ -374,7 +399,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                 interface,
                 version,
             } => {
-                trace!("Global announced: {interface} (name: {name}, version: {version})");
+                debug!("Global announced: {interface} (name: {name}, version: {version})");
                 match &interface[..] {
                     "wl_seat" => {
                         let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, version, qh, ());
@@ -421,7 +446,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
             }
             // Remove global from store when it becomes unavailable
             wl_registry::Event::GlobalRemove { name } => {
-                trace!("Global removed: {name}");
+                debug!("Global removed: {name}");
                 let Some((idx, (interface, name, _))) = state
                     .globals
                     .iter()
@@ -455,7 +480,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                 }
                 state.globals.remove(idx);
             }
-            ev => warn!("Received unknown Wayland event: {ev:?}"),
+            ev => warn!("WlRegistry received unknown event:\n{ev:?}"),
         }
     }
 }
@@ -469,7 +494,7 @@ impl Dispatch<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, ()> 
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        warn!("Received a virtual keyboard manager event {event:?}");
+        warn!("ZwpVirtualKeyboardManagerV1 received unknown event:\n{event:?}");
     }
 }
 
@@ -482,7 +507,7 @@ impl Dispatch<zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1, ()> for WaylandStat
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        warn!("Got a virtual keyboard event {event:?}");
+        warn!("ZwpVirtualKeyboardV1 received unknown event:\n{event:?}");
     }
 }
 
@@ -495,7 +520,7 @@ impl Dispatch<zwp_input_method_manager_v2::ZwpInputMethodManagerV2, ()> for Wayl
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        warn!("Received an input method manager event {event:?}");
+        warn!("ZwpInputMethodManagerV2 received unknown event:\n{event:?}");
     }
 }
 impl Dispatch<zwp_input_method_v2::ZwpInputMethodV2, ()> for WaylandState {
@@ -507,9 +532,11 @@ impl Dispatch<zwp_input_method_v2::ZwpInputMethodV2, ()> for WaylandState {
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        warn!("Got a input method event {event:?}");
         match event {
-            zwp_input_method_v2::Event::Done => state.im_serial += Wrapping(1u32),
+            zwp_input_method_v2::Event::Done => {
+                debug!("ZwpInputMethodV2 received event:\nzwp_input_method_v2::Event::Done");
+                state.im_serial += Wrapping(1u32)
+            }
             zwp_input_method_v2::Event::Activate
             | zwp_input_method_v2::Event::Deactivate
             | zwp_input_method_v2::Event::SurroundingText {
@@ -522,8 +549,10 @@ impl Dispatch<zwp_input_method_v2::ZwpInputMethodV2, ()> for WaylandState {
                 hint: _,
                 purpose: _,
             }
-            | zwp_input_method_v2::Event::Unavailable => (),
-            _ => todo!(),
+            | zwp_input_method_v2::Event::Unavailable => {
+                trace!("ZwpInputMethodV2 received irrelevant event:\n{event:?}")
+            }
+            _ => warn!("ZwpInputMethodV2 received unknown event:\n{event:?}"),
         }
     }
 }
@@ -537,15 +566,12 @@ impl Dispatch<wl_seat::WlSeat, ()> for WaylandState {
         _con: &Connection,
         qh: &QueueHandle<Self>,
     ) {
-        warn!("Received a seat event {event:?}");
         match event {
             wl_seat::Event::Capabilities { capabilities } => {
-                let capabilities = match capabilities {
-                    wayland_client::WEnum::Value(capabilities) => capabilities,
-                    wayland_client::WEnum::Unknown(v) => {
-                        warn!("Unknown value for the capabilities of the wl_seat: {v}");
-                        return;
-                    }
+                debug!("WlSeat received event:\n{event:?}");
+                let wayland_client::WEnum::Value(capabilities) = capabilities else {
+                    warn!("Unknown value for the capabilities of the wl_seat: {capabilities:?}");
+                    return;
                 };
 
                 // Create a WlKeyboard if the seat has the capability
@@ -560,22 +586,73 @@ impl Dispatch<wl_seat::WlSeat, ()> for WaylandState {
                     state.seat_pointer = Some(seat_pointer);
                 }
             }
-            wl_seat::Event::Name { name: _ } => {}
-            _ => warn!("unknown event"),
+            wl_seat::Event::Name { name: _ } => {
+                trace!("WlSeat received irrelevant event:\n{event:?}");
+            }
+            _ => warn!("WlSeat received unknown event:\n{event:?}"),
         }
     }
 }
 
 impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
     fn event(
-        _state: &mut Self,
+        state: &mut Self,
         _seat: &wl_keyboard::WlKeyboard,
         event: wl_keyboard::Event,
         (): &(),
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        warn!("Got a wl_keyboard event {event:?}");
+        match event {
+            wl_keyboard::Event::Keymap { format, fd, size } => {
+                debug!(
+                    "WlKeyboard received event:\nwl_keyboard::Event::Keymap {{ {format:?}, {fd:?}, {size} }}"
+                );
+                let mut file = std::fs::File::from(fd);
+
+                // Check if the file size is correct
+                let Ok(metadata) = file.metadata() else {
+                    error!(
+                        "could not get the files metadata! skipping file size check and resetting the keymap"
+                    );
+                    state.seat_keymap = None;
+                    return;
+                };
+                if metadata.len() != size.into() {
+                    error!("file does not have the expected size! resetting the keymap");
+                    state.seat_keymap = None;
+                    return;
+                }
+
+                // Get the received format
+                let format = match format {
+                    WEnum::Value(format) => format as xkb::KeymapFormat,
+                    _ => {
+                        error!("invalid format received! resetting the keymap");
+                        state.seat_keymap = None;
+                        return;
+                    }
+                };
+
+                let flags = xkb::KEYMAP_COMPILE_NO_FLAGS;
+                // TODO: Handle old state here
+                let Some(xkb_keymap) =
+                    xkb::Keymap::new_from_file(&state.xkb_context, &mut file, format, flags)
+                else {
+                    return state.seat_keymap = None;
+                };
+                let xkb_state = xkb::State::new(&xkb_keymap);
+                state.seat_keymap = Some((xkb_keymap, xkb_state));
+            }
+            wl_keyboard::Event::Enter { .. }
+            | wl_keyboard::Event::Leave { .. }
+            | wl_keyboard::Event::Key { .. }
+            | wl_keyboard::Event::Modifiers { .. }
+            | wl_keyboard::Event::RepeatInfo { .. } => {
+                debug!("WlKeyboard received irrelevant event:\n{event:?}")
+            }
+            _ => warn!("WlKeyboard received unknown event:\n{event:?}"),
+        }
     }
 }
 
@@ -588,7 +665,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for WaylandState {
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        warn!("Got a wl_pointer event {event:?}");
+        warn!("WlPointer received unknown event:\n{event:?}");
     }
 }
 
@@ -603,6 +680,7 @@ impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
     ) {
         match event {
             wl_output::Event::Geometry { transform, .. } => {
+                debug!("WlOutput received event:\n{event:?}");
                 // The width and height need to get switched if the transform changes them
                 // TODO: Check if this really is needed
                 if transform == WEnum::Value(wl_output::Transform::_90)
@@ -621,9 +699,9 @@ impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
                 flags,
                 width,
                 height,
-                refresh,
+                refresh: _,
             } => {
-                warn!("flags: {flags:?}, width: {width}, : {height}, refresh: {refresh}");
+                debug!("WlOutput received event:\n{event:?}");
                 if flags == WEnum::Value(Mode::Current) {
                     if let Some((_, output_data)) =
                         state.outputs.iter_mut().find(|(o, _)| o == output)
@@ -633,9 +711,14 @@ impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
                     }
                 }
             }
-            ev => {
-                warn!("{ev:?}");
+            // TODO: Check if Scale is relevant
+            wl_output::Event::Done
+            | wl_output::Event::Scale { factor: _ }
+            | wl_output::Event::Name { name: _ }
+            | wl_output::Event::Description { description: _ } => {
+                trace!("WlOutput received irrelevant event:\n{event:?}")
             }
+            _ => warn!("WlOutput received unknown event:\n{event:?}"),
         }
     }
 }
@@ -649,7 +732,7 @@ impl Dispatch<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, ()> 
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        warn!("Received a virtual keyboard manager event {event:?}");
+        warn!("ZwlrVirtualPointerManagerV1 received unknown event:\n{event:?}");
     }
 }
 
@@ -662,7 +745,7 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        warn!("Got a virtual keyboard event {event:?}");
+        warn!("ZwlrVirtualPointerV1 received unknown event:\n{event:?}");
     }
 }
 

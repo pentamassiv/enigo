@@ -16,14 +16,14 @@ use nom::{
 
 type Keycode = u32;
 
-trait Parse {
+pub(crate) trait Parse {
     fn parse(input: &str) -> IResult<&str, Self>
     where
         Self: Sized;
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
-struct Keymap {
+pub(crate) struct ParsedKeymap {
     keycodes: Keycodes,
     // Don't parse this, just keep it as is
     types: Option<String>,
@@ -34,7 +34,7 @@ struct Keymap {
     geometry: Option<String>,
 }
 
-impl Display for Keymap {
+impl Display for ParsedKeymap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "xkb_keymap {{")?;
         write!(f, "{}\n", self.keycodes)?;
@@ -53,7 +53,7 @@ impl Display for Keymap {
     }
 }
 
-impl Parse for Keymap {
+impl Parse for ParsedKeymap {
     fn parse(input: &str) -> IResult<&str, Self> {
         let types_parser = delimited(ws(tag("xkb_types")), take_until("\n};\n"), tag("\n};\n"))
             .map(|s: &str| s.to_string());
@@ -366,14 +366,6 @@ where
     F: Parser<&'a str, Output = O, Error = E>,
 {
     delimited(multispace0, inner, multispace0)
-}
-
-fn main() {
-    let keymap_str = std::fs::read_to_string("/usr/share/X11/xkb/keymaps/evdev").unwrap();
-    let (remaining, keymap) = Keymap::parse(&keymap_str).unwrap();
-    println!("remaining:\n{remaining}");
-    let keymap_serialized = format!("{keymap}");
-    assert_eq!(keymap_str, keymap_serialized);
 }
 
 #[cfg(test)]

@@ -201,7 +201,7 @@ impl Con {
                 .seat_keymap
                 .as_mut()
                 .ok_or(InputError::Simulate("no keymap available"))?
-                .update_state(keycode, Direction::Press);
+                .update_state(xkb::Keycode::new(keycode), xkb::KeyDirection::Down);
 
             self.flush()?;
         }
@@ -213,7 +213,7 @@ impl Con {
                 .seat_keymap
                 .as_mut()
                 .ok_or(InputError::Simulate("no keymap available"))?
-                .update_state(keycode, Direction::Release);
+                .update_state(xkb::Keycode::new(keycode), xkb::KeyDirection::Up);
 
             self.flush()?;
         }
@@ -312,7 +312,7 @@ impl Drop for Con {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 /// Stores the manager for the various protocols
 struct WaylandState {
     // interface name, global id, version
@@ -325,33 +325,10 @@ struct WaylandState {
     im_serial: Wrapping<u32>,
     pointer_manager: Option<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1>,
     virtual_pointer: Option<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1>,
-    xkb_context: xkb::Context,
     seat: Option<wl_seat::WlSeat>,
     seat_keyboard: Option<WlKeyboard>,
     seat_keymap: Option<Keymap2>,
     seat_pointer: Option<WlPointer>,
-}
-
-// Derive Default if https://github.com/rust-x-bindings/xkbcommon-rs/pull/62 gets merged and a new version is published
-impl Default for WaylandState {
-    fn default() -> Self {
-        Self {
-            xkb_context: xkb::Context::new(xkb::CONTEXT_NO_FLAGS),
-            globals: Default::default(),
-            outputs: Default::default(),
-            keyboard_manager: Default::default(),
-            virtual_keyboard: Default::default(),
-            im_manager: Default::default(),
-            input_method: Default::default(),
-            im_serial: Default::default(),
-            pointer_manager: Default::default(),
-            virtual_pointer: Default::default(),
-            seat: Default::default(),
-            seat_keyboard: Default::default(),
-            seat_keymap: Default::default(),
-            seat_pointer: Default::default(),
-        }
-    }
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
@@ -579,21 +556,6 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
                 debug!(
                     "WlKeyboard received event:\nwl_keyboard::Event::Keymap {{ {format:?}, {fd:?}, {size} }}"
                 );
-                let mut file = std::fs::File::from(fd);
-
-                // Check if the file size is correct
-                let Ok(metadata) = file.metadata() else {
-                    error!(
-                        "could not get the files metadata! skipping file size check and resetting the keymap"
-                    );
-                    state.seat_keymap = None;
-                    return;
-                };
-                if metadata.len() != size.into() {
-                    error!("file does not have the expected size! resetting the keymap");
-                    state.seat_keymap = None;
-                    return;
-                }
 
                 // Get the received format
                 let format = match format {
@@ -605,18 +567,13 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
                     }
                 };
 
-                let flags = xkb::KEYMAP_COMPILE_NO_FLAGS;
-
-                let Some(xkb_keymap) =
-                    xkb::Keymap::new_from_file(&state.xkb_context, &mut file, format, flags)
-                else {
-                    error!("Creating xkb:Keymap failed! resetting the keymap");
-                    return state.seat_keymap = None;
-                };
-
                 match &mut state.seat_keymap {
-                    Some(keymap) => keymap.update(xkb_keymap),
-                    None => state.seat_keymap = Some(Keymap2::default()),
+                    Some(keymap) => {
+                        if keymap.update(format, fd, size).is_err() {
+                            state.seat_keymap = None
+                        }
+                    }
+                    None => state.seat_keymap = Keymap2::new(format, fd, size).ok(),
                 }
             }
             // On Wayland the clients only get notified about pressed keys or modifiers if they have

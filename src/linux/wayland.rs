@@ -1,10 +1,5 @@
 use std::{
-    collections::VecDeque,
-    convert::TryInto as _,
-    env,
-    num::Wrapping,
-    os::unix::{io::AsFd, net::UnixStream},
-    path::PathBuf,
+    convert::TryInto as _, env, num::Wrapping, os::unix::net::UnixStream, path::PathBuf,
     time::Instant,
 };
 
@@ -28,13 +23,10 @@ use wayland_protocols_wlr::virtual_pointer::v1::client::{
 };
 use xkbcommon::xkb;
 
-use super::{
-    keymap::{Bind, KeyMap},
-    keymap2::Keymap2,
-};
+use super::keymap2::Keymap2;
 use crate::{
     Axis, Button, Coordinate, Direction, InputError, InputResult, Key, Keyboard, Mouse,
-    NewConError, keycodes::Modifier, keycodes::ModifierBitflag,
+    NewConError, keycodes::ModifierBitflag,
 };
 
 pub type Keycode = u32;
@@ -296,11 +288,6 @@ impl Con {
         trace!("flushed event queue");
         Ok(())
     }
-}
-
-impl Bind<Keycode> for Con {
-    // Nothing to do
-    // On Wayland only the whole keymap can be applied
 }
 
 impl Drop for Con {

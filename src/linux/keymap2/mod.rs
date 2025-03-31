@@ -1,4 +1,4 @@
-use std::os::fd::OwnedFd;
+use std::{fs::File, os::fd::OwnedFd};
 
 use log::{debug, error, warn};
 use xkbcommon::xkb::{
@@ -26,7 +26,7 @@ impl Keymap2 {
         debug!("creating new xkb:Keymap");
 
         // Read keymap to String
-        let mut keymap_file = std::fs::File::from(fd);
+        let mut keymap_file = File::from(fd);
         let mut keymap_str = String::new();
         keymap_file.read_to_string(&mut keymap_str).map_err(|e| {
             error!("unable to read file to string:\n{e}");
@@ -96,16 +96,13 @@ impl Keymap2 {
     fn new_keymap(
         context: &Context,
         format: KeymapFormat,
-        keymap_file: &mut std::fs::File,
+        keymap_file: &mut File,
         size: u32,
     ) -> Result<Keymap, ()> {
-        // Check if the file size is correct
-        let Ok(metadata) = keymap_file.metadata() else {
-            error!(
-                "could not get the files metadata! skipping file size check and resetting the keymap"
-            );
-            return Err(());
-        };
+        // Check if the file size is correct.
+        let metadata = keymap_file.metadata().map_err(|e| {
+            error!("could not get the file's metadata! Skipping file size check. Error: {e}");
+        })?;
         if metadata.len() != size.into() {
             error!("file does not have the expected size! resetting the keymap");
             return Err(());
@@ -113,12 +110,10 @@ impl Keymap2 {
 
         let flags = KEYMAP_COMPILE_NO_FLAGS;
 
-        // Try creating keymap
-        let Some(xkb_keymap) = Keymap::new_from_file(context, keymap_file, format, flags) else {
+        // Try creating keymap.
+        Keymap::new_from_file(context, keymap_file, format, flags).ok_or_else(|| {
             error!("Creating xkb:Keymap failed! resetting the keymap");
-            return Err(());
-        };
-        Ok(xkb_keymap)
+        })
     }
 }
 

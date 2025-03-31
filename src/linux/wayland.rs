@@ -47,7 +47,6 @@ struct OutputInfo {
 }
 
 pub struct Con {
-    keymap: KeyMap<Keycode>,
     event_queue: EventQueue<WaylandState>,
     state: WaylandState,
     base_time: std::time::Instant,
@@ -92,22 +91,7 @@ impl Con {
             .roundtrip(&mut state)
             .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
 
-        let keymap = KeyMap::new(
-            8,
-            255,
-            // All keycodes are unused when initialized
-            // Never use keycode 8
-            // Keycode 8 is special: when converted to evdev keycodes,
-            // 8 is subtracted, resulting in 0. This typically leads to no effect
-            // when simulating input because keycode 0 corresponds to NoSymbol,
-            // meaning it has no assigned key mapping.
-            (9..=255).collect::<VecDeque<Keycode>>(),
-            0,
-            Vec::new(),
-        );
-
         let mut connection = Self {
-            keymap,
             event_queue,
             state,
             base_time: Instant::now(),
@@ -115,10 +99,6 @@ impl Con {
 
         connection.init_protocols()?;
         connection.check_available_protocols()?;
-
-        connection
-            .apply_keymap()
-            .map_err(|_| NewConError::EstablishCon("Unable to apply the keymap"))?;
 
         Ok(connection)
     }
@@ -208,24 +188,40 @@ impl Con {
     /// # Errors
     /// TODO
     fn send_key_event(&mut self, keycode: Keycode, direction: Direction) -> InputResult<()> {
+        // Apply the new keymap if there were any changes
+        self.update_keymap()?;
+
         let vk = self
             .state
             .virtual_keyboard
             .as_ref()
             .ok_or(InputError::Simulate("no way to enter key"))?;
         is_alive(vk)?;
+
         let time = self.get_time();
         let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
 
         if direction == Direction::Press || direction == Direction::Click {
             trace!("vk.key({time}, {keycode}, 1)");
             vk.key(time, keycode, 1);
+            // Update keymap state
+            self.state
+                .seat_keymap
+                .as_mut()
+                .ok_or(InputError::Simulate("no keymap available"))?
+                .update_state(keycode, Direction::Press);
 
             self.flush()?;
         }
         if direction == Direction::Release || direction == Direction::Click {
             trace!("vk.key({time}, {keycode}, 0)");
             vk.key(time, keycode, 0);
+            // Update keymap state
+            self.state
+                .seat_keymap
+                .as_mut()
+                .ok_or(InputError::Simulate("no keymap available"))?
+                .update_state(keycode, Direction::Release);
 
             self.flush()?;
         }
@@ -250,6 +246,12 @@ impl Con {
 
         // Send the modifier event
         vk.modifiers(modifiers, 0, 0, 0);
+        // Update keymap state
+        self.state
+            .seat_keymap
+            .as_mut()
+            .ok_or(InputError::Simulate("no keymap available"))?
+            .update_modifiers(modifiers);
 
         self.flush()?;
 
@@ -260,8 +262,8 @@ impl Con {
     ///
     /// # Errors
     /// TODO
-    fn apply_keymap(&mut self) -> InputResult<()> {
-        trace!("apply_keymap(&mut self)");
+    fn update_keymap(&mut self) -> InputResult<()> {
+        debug!("update_keymap(&mut self)");
         let vk = self
             .state
             .virtual_keyboard
@@ -269,39 +271,18 @@ impl Con {
             .ok_or(InputError::Simulate("no way to apply keymap"))?;
         is_alive(vk)?;
 
-        // Regenerate keymap and handle failure
-        let keymap_size = self
-            .keymap
-            .regenerate()
-            .map_err(|_| InputError::Mapping("unable to regenerate keymap".to_string()))?;
-
-        // Early return if the keymap was not changed because we only send an updated
-        // keymap if we had to regenerate it
-        let Some(size) = keymap_size else {
-            return Ok(());
+        let (format, keymap_file, size) = match &self.state.seat_keymap {
+            Some(keymap) => keymap.get_file(),
+            None => {
+                todo!() // Implement fallback (should hardcoded keymap be used here?)
+            }
         };
-
-        trace!("update wayland keymap");
-
-        let keymap_file = self.keymap.keymap_mapping.file.as_ref().unwrap(); // Safe here, assuming file is always present
-        vk.keymap(1, keymap_file.as_fd(), size);
+        vk.keymap(format, keymap_file, size);
 
         debug!("wait for response after keymap call");
         self.event_queue
             .roundtrip(&mut self.state)
             .map_err(|_| InputError::Simulate("Wayland roundtrip failed"))?;
-
-        Ok(())
-    }
-
-    fn raw(&mut self, keycode: Keycode, direction: Direction) -> InputResult<()> {
-        // Apply the new keymap if there were any changes
-        self.apply_keymap()?;
-
-        // Send the key event and update keymap state
-        // This is important to avoid unmapping held keys
-        self.send_key_event(keycode, direction)?;
-        self.keymap.key(keycode, direction);
 
         Ok(())
     }
@@ -794,34 +775,60 @@ impl Keyboard for Con {
     }
 
     fn key(&mut self, key: Key, direction: Direction) -> InputResult<()> {
-        let Ok(modifier) = Modifier::try_from(key) else {
-            let keycode = self.keymap.key_to_keycode(&(), key)?;
-            self.raw(keycode, direction)?;
-            return Ok(());
+        // Update keymap in case it was changed in the meantime
+        // TODO: Is it possible another process changes the keymap of the virtual
+        // keyboard? Otherwise this is not needed
+        self.event_queue
+            .roundtrip(&mut self.state)
+            .map_err(|_| InputError::Simulate("Wayland roundtrip failed"))?;
+
+        let keymap = self
+            .state
+            .seat_keymap
+            .as_mut()
+            .ok_or(InputError::Simulate("no keymap available"))?;
+
+        let keycode = match keymap.key_to_keycode(key) {
+            Some(keycode) => keycode,
+            None => {
+                let keycode = keymap.map_key(key)?;
+                keycode
+            }
         };
-
-        // Send the events to the compositor
-        trace!("it is a modifier: {modifier:?}");
-        if direction == Direction::Click || direction == Direction::Press {
-            let modifiers = self
-                .keymap
-                .enter_modifier(modifier.bitflag(), Direction::Press);
-            self.send_modifier_event(modifiers)?;
-        }
-        if direction == Direction::Click || direction == Direction::Release {
-            let modifiers = self
-                .keymap
-                .enter_modifier(modifier.bitflag(), Direction::Release);
-            self.send_modifier_event(modifiers)?;
-        }
-
-        Ok(())
+        self.raw(keycode, direction)
     }
 
     fn raw(&mut self, keycode: u16, direction: Direction) -> InputResult<()> {
-        self.raw(keycode as u32, direction)
+        let keymap = self
+            .state
+            .seat_keymap
+            .as_mut()
+            .ok_or(InputError::Simulate("no keymap available"))?;
+
+        let is_modifier = keymap.is_modifier(keycode);
+
+        if direction == Direction::Click || direction == Direction::Press {
+            match is_modifier {
+                Some(modifier_bitflag) => {
+                    trace!("it is a modifier: {modifier_bitflag:?}");
+                    self.send_modifier_event(modifier_bitflag)?
+                }
+                None => self.send_key_event(keycode.into(), direction)?,
+            }
+        }
+        if direction == Direction::Click || direction == Direction::Release {
+            match is_modifier {
+                Some(modifier_bitflag) => {
+                    trace!("it is a modifier: {modifier_bitflag:?}");
+                    self.send_modifier_event(modifier_bitflag)?
+                }
+                None => self.send_key_event(keycode.into(), Direction::Release)?,
+            }
+        }
+        Ok(())
     }
 }
+
 impl Mouse for Con {
     fn button(&mut self, button: Button, direction: Direction) -> InputResult<()> {
         let vp = self

@@ -28,7 +28,10 @@ use wayland_protocols_wlr::virtual_pointer::v1::client::{
 };
 use xkbcommon::xkb;
 
-use super::keymap::{Bind, KeyMap};
+use super::{
+    keymap::{Bind, KeyMap},
+    keymap2::Keymap2,
+};
 use crate::{
     Axis, Button, Coordinate, Direction, InputError, InputResult, Key, Keyboard, Mouse,
     NewConError, keycodes::Modifier, keycodes::ModifierBitflag,
@@ -357,7 +360,7 @@ struct WaylandState {
     xkb_context: xkb::Context,
     seat: Option<wl_seat::WlSeat>,
     seat_keyboard: Option<WlKeyboard>,
-    seat_keymap: Option<(xkb::Keymap, xkb::State)>,
+    seat_keymap: Option<Keymap2>,
     seat_pointer: Option<WlPointer>,
 }
 
@@ -635,14 +638,18 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
                 };
 
                 let flags = xkb::KEYMAP_COMPILE_NO_FLAGS;
-                // TODO: Handle old state here
+
                 let Some(xkb_keymap) =
                     xkb::Keymap::new_from_file(&state.xkb_context, &mut file, format, flags)
                 else {
+                    error!("Creating xkb:Keymap failed! resetting the keymap");
                     return state.seat_keymap = None;
                 };
-                let xkb_state = xkb::State::new(&xkb_keymap);
-                state.seat_keymap = Some((xkb_keymap, xkb_state));
+
+                match &mut state.seat_keymap {
+                    Some(keymap) => keymap.update(xkb_keymap),
+                    None => state.seat_keymap = Some(Keymap2::default()),
+                }
             }
             // On Wayland the clients only get notified about pressed keys or modifiers if they have
             // the focus. We cannot assume that is the case, so the received events don't reflect

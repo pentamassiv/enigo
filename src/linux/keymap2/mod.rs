@@ -38,8 +38,10 @@ impl Keymap2 {
         })?;
 
         // Parse the keymap
-        let (remaining, parsed_keymap) = ParsedKeymap::parse(&keymap_str).unwrap();
-        if remaining != "" {
+        let (remaining, parsed_keymap) = ParsedKeymap::parse(&keymap_str).map_err(|_| {
+            error!("parsing keymap failed");
+        })?;
+        if !remaining.is_empty() {
             warn!("not all of the keymap could be parsed")
         }
 

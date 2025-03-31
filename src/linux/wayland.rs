@@ -644,6 +644,9 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
                 let xkb_state = xkb::State::new(&xkb_keymap);
                 state.seat_keymap = Some((xkb_keymap, xkb_state));
             }
+            // On Wayland the clients only get notified about pressed keys or modifiers if they have
+            // the focus. We cannot assume that is the case, so the received events don't reflect
+            // the full picture and we cannot use them to keep track of the state of the keyboard
             wl_keyboard::Event::Enter { .. }
             | wl_keyboard::Event::Leave { .. }
             | wl_keyboard::Event::Key { .. }

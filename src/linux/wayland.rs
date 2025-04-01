@@ -201,7 +201,7 @@ impl Con {
                 .seat_keymap
                 .as_mut()
                 .ok_or(InputError::Simulate("no keymap available"))?
-                .update_state(xkb::Keycode::new(keycode), xkb::KeyDirection::Down);
+                .update_key(xkb::Keycode::new(keycode), xkb::KeyDirection::Down);
 
             self.flush()?;
         }
@@ -213,7 +213,7 @@ impl Con {
                 .seat_keymap
                 .as_mut()
                 .ok_or(InputError::Simulate("no keymap available"))?
-                .update_state(xkb::Keycode::new(keycode), xkb::KeyDirection::Up);
+                .update_key(xkb::Keycode::new(keycode), xkb::KeyDirection::Up);
 
             self.flush()?;
         }

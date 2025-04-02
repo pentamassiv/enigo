@@ -1941,7 +1941,7 @@ xkb_keymap {
     	modifier_map Mod2 { <NMLK> };
     	modifier_map Mod3 { <LVL5>, <HYPR> };
     	modifier_map Mod4 { <LWIN>, <RWIN>, <SUPR> };
-    	modifier_map Mod5 { <LVL3> };
+     modifier_map Mod5 { <LVL3> };
     };
     
     };

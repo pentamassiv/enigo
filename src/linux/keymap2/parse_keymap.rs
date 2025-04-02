@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use log::{error, warn};
+use log::{debug, error, warn};
 use nom::{
     IResult, Parser,
     branch::permutation,
@@ -106,6 +106,8 @@ impl TryFrom<&mut std::fs::File> for ParsedKeymap {
         keymap_file.read_to_string(&mut keymap_str).map_err(|e| {
             error!("unable to read file to string:\n{e}");
         })?;
+
+        debug!("{keymap_str}");
 
         // Reset the cursor to the beginning of the file.
         keymap_file.seek(SeekFrom::Start(0)).map_err(|e| {

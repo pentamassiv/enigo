@@ -33,10 +33,30 @@ impl Keymap2 {
         debug!("new(format: {format}, size: {size}, ...)");
 
         let mut keymap_file = File::from(fd);
+
+        // Check if the file size is correct
+        let metadata = keymap_file.metadata().map_err(|e| {
+            error!("could not get the file's metadata! Skipping file size check. Error: {e}");
+        })?;
+        if metadata.len() != size.into() {
+            error!("file does not have the expected size! resetting the keymap");
+            return Err(());
+        }
+
         let parsed_keymap = ParsedKeymap::try_from(&mut keymap_file).map_err(|_| {
             trace!("unable to parse the new keymap");
         })?;
-        let keymap = Self::new_xkb_keymap(&context, format, &mut keymap_file, size)?;
+        // Unfortunately we need to serialize the parsed keymap again, because the
+        // xkbcommon parser is super strict and can't handle missing newlines. Ours
+        // doesn't mind and when we serialize it, the newlines are added at the correct
+        // places so xkbcommon can parse it too
+        let keymap_string = format!("{parsed_keymap}");
+        let keymap =
+            Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
+                .ok_or({
+                    error!("file does not have the expected size! resetting the keymap");
+                })?;
+
         let state = State::new(&keymap);
 
         Ok(Self {
@@ -152,6 +172,7 @@ impl Keymap2 {
         self.parsed_keymap.map_key(key_name)
     }
 
+    /*
     fn new_xkb_keymap(
         context: &Context,
         format: KeymapFormat,
@@ -181,7 +202,7 @@ impl Keymap2 {
             })
             .or_else(|| Keymap::new_from_file(context, keymap_file, format, flags))
             .ok_or_else(|| error!("Creating xkb::Keymap failed! resetting the keymap"))
-    }
+    }*/
 }
 
 impl Default for Keymap2 {

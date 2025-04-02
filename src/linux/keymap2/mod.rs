@@ -51,10 +51,11 @@ impl Keymap2 {
         // doesn't mind and when we serialize it, the newlines are added at the correct
         // places so xkbcommon can parse it too
         let keymap_string = format!("{parsed_keymap}");
+        debug!("parsed keymap serialized:\n{keymap_string}");
         let keymap =
             Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
                 .ok_or({
-                    error!("file does not have the expected size! resetting the keymap");
+                    error!("unable to parse the keymap with xkbcommon! resetting the keymap");
                 })?;
 
         let state = State::new(&keymap);

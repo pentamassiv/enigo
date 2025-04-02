@@ -15,6 +15,8 @@ use nom::{
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 
+use crate::InputError;
+
 type Keycode = u32;
 
 pub(crate) trait Parse {
@@ -33,6 +35,64 @@ pub(crate) struct ParsedKeymap {
     symbols: Symbols,
     // Don't parse this, just keep it as is
     geometry: Option<String>,
+}
+
+impl ParsedKeymap {
+    /// Try to find an unused keycode and identifier to map the provided keyname
+    /// to. Returns the keycode the key is now mapped to
+    // TODO: Add tests for this function
+    pub fn map_key(&mut self, key_name: &str) -> crate::InputResult<u16> {
+        // Find an unused keycode
+        let free_keycode_u32 = (self.keycodes.minimum..self.keycodes.maximum)
+            .find(|raw| {
+                !self
+                    .keycodes
+                    .keycodes
+                    .iter()
+                    .any(|entry| *raw == entry.code)
+            })
+            .ok_or_else(|| InputError::Mapping("no available keycode".to_string()))?;
+        let free_keycode_u16 = u16::try_from(free_keycode_u32)
+            .map_err(|_| InputError::Mapping("the available keycode exceeds u16::MAX".to_string()));
+
+        // Find an unused identifier
+        let free_identifier = (0..=9999)
+            .rev()
+            .into_iter()
+            .map(|idx| format!("{idx:0>4}"))
+            .filter(|potential_identifier_name| {
+                !self
+                    .keycodes
+                    .keycodes
+                    .iter()
+                    .any(|entry| *potential_identifier_name == entry.identifier.identifier)
+            })
+            .find(|potential_identifier_name| {
+                !self
+                    .symbols
+                    .keys
+                    .iter()
+                    .any(|(identifier, _)| *potential_identifier_name == identifier.identifier)
+            })
+            .ok_or_else(|| InputError::Mapping("no available identifier".to_string()))?;
+        let free_identifier = Identifier {
+            identifier: free_identifier,
+        };
+
+        // Add free identifier and keycode to keymap
+        self.keycodes.keycodes.push(KeycodeEntry {
+            identifier: free_identifier.clone(),
+            code: free_keycode_u32,
+        });
+
+        let symbols_string = format!(
+            "key {free_identifier} {{         [        {},           {} ] }};",
+            key_name, key_name
+        );
+        self.symbols.keys.push((free_identifier, symbols_string));
+
+        free_keycode_u16
+    }
 }
 
 impl TryFrom<&mut std::fs::File> for ParsedKeymap {

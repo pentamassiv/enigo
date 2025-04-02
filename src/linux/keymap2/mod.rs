@@ -1,24 +1,25 @@
-use std::{collections::HashSet, fs::File, os::fd::OwnedFd};
+use std::{collections::HashSet, fs::File, io::Write as _, os::fd::OwnedFd};
 
 use log::{debug, error, trace};
 use xkbcommon::xkb::{
-    Context, KEYMAP_COMPILE_NO_FLAGS, KeyDirection, Keycode, Keymap, KeymapFormat,
-    STATE_LAYOUT_DEPRESSED, STATE_LAYOUT_LATCHED, STATE_LAYOUT_LOCKED, STATE_MODS_DEPRESSED,
-    STATE_MODS_LATCHED, STATE_MODS_LOCKED, State,
+    Context, KEYMAP_COMPILE_NO_FLAGS, KEYMAP_FORMAT_TEXT_V1, KeyDirection, Keycode, Keymap,
+    KeymapFormat, STATE_LAYOUT_DEPRESSED, STATE_LAYOUT_LATCHED, STATE_LAYOUT_LOCKED,
+    STATE_MODS_DEPRESSED, STATE_MODS_LATCHED, STATE_MODS_LOCKED, State,
 };
+use xkeysym::Keysym;
 
 use crate::{InputResult, Key, keycodes::ModifierBitflag};
 
 mod parse_keymap;
 use parse_keymap::ParsedKeymap;
 
-#[derive(Clone)]
 pub struct Keymap2 {
     context: Context,
     keymap: Keymap,
     state: State,
     parsed_keymap: ParsedKeymap,
     pressed_keys: HashSet<Keycode>,
+    keymap_file: Option<File>,
 }
 
 impl Keymap2 {
@@ -38,6 +39,7 @@ impl Keymap2 {
             state,
             parsed_keymap,
             pressed_keys: HashSet::with_capacity(8),
+            keymap_file: Some(keymap_file),
         })
     }
 
@@ -56,6 +58,7 @@ impl Keymap2 {
             mut state,
             parsed_keymap,
             pressed_keys,
+            keymap_file,
         } = Self::new(self.context.clone(), format, fd, size).map_err(|_| {
             trace!("unable to create new keymap");
         })?;
@@ -79,6 +82,7 @@ impl Keymap2 {
         self.keymap = keymap;
         self.state = state;
         self.parsed_keymap = parsed_keymap;
+        self.keymap_file = keymap_file;
 
         Ok(())
     }
@@ -100,10 +104,27 @@ impl Keymap2 {
         todo!()
     }
 
-    pub fn get_file(&self) -> (u32, ::std::os::unix::io::BorrowedFd<'_>, u32) {
-        let keymap_serialized = format!("{keymap}");
-        debug!("updating xkb:Keymap");
-        todo!()
+    pub fn format_file_size(&self) -> Result<(KeymapFormat, File, u32), ()> {
+        let mut keymap_file = tempfile::tempfile().map_err(|e| {
+            error!("could not create temporary file. Error: {e}");
+        })?;
+        write!(keymap_file, "{}", self.parsed_keymap).map_err(|e| {
+            error!("could not write to temporary file. Error: {e}");
+        })?;
+        let metadata = keymap_file.metadata().map_err(|e| {
+            error!("could not get the file's metadata! Error: {e}");
+        })?;
+        let size = metadata.len().try_into().map_err(|_| {
+            error!(
+                "keymap file is {} but the maximum is {} (u32::MAX)",
+                metadata.len(),
+                u32::MAX
+            );
+        })?;
+
+        let format = KEYMAP_FORMAT_TEXT_V1;
+
+        Ok((format, keymap_file, size))
     }
 
     pub fn is_modifier(&self, keycode: u16) -> Option<ModifierBitflag> {
@@ -112,13 +133,17 @@ impl Keymap2 {
     }
 
     pub fn key_to_keycode(&self, key: Key) -> Option<u16> {
-        debug!("updating xkb:Keymap");
-        todo!()
+        Keysym::from(key)
+            .name()
+            .and_then(|name| self.keymap.key_by_name(name).map(|k| k.raw()))
+            .and_then(|raw| u16::try_from(raw).ok())
     }
 
-    pub fn map_key(&self, key: Key) -> InputResult<u16> {
-        debug!("updating xkb:Keymap");
-        todo!()
+    pub fn map_key(&mut self, key: Key) -> InputResult<u16> {
+        let key_name = Keysym::from(key).name().ok_or_else(|| {
+            crate::InputError::Mapping("the key to map doesn't have a name".to_string())
+        })?;
+        self.parsed_keymap.map_key(key_name)
     }
 
     fn new_xkb_keymap(

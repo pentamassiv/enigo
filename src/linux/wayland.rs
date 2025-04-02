@@ -1,5 +1,9 @@
 use std::{
-    convert::TryInto as _, env, num::Wrapping, os::unix::net::UnixStream, path::PathBuf,
+    convert::TryInto as _,
+    env,
+    num::Wrapping,
+    os::{fd::AsFd, unix::net::UnixStream},
+    path::PathBuf,
     time::Instant,
 };
 
@@ -180,9 +184,6 @@ impl Con {
     /// # Errors
     /// TODO
     fn send_key_event(&mut self, keycode: Keycode, direction: Direction) -> InputResult<()> {
-        // Apply the new keymap if there were any changes
-        self.update_keymap()?;
-
         let vk = self
             .state
             .virtual_keyboard
@@ -264,12 +265,15 @@ impl Con {
         is_alive(vk)?;
 
         let (format, keymap_file, size) = match &self.state.seat_keymap {
-            Some(keymap) => keymap.get_file(),
+            Some(keymap) => keymap
+                .format_file_size()
+                .map_err(|()| InputError::Mapping("could not update the keymap".to_string()))?,
             None => {
                 todo!() // Implement fallback (should hardcoded keymap be used here?)
             }
         };
-        vk.keymap(format, keymap_file, size);
+        // TODO: Check if it is a problem we drop the file after this function
+        vk.keymap(format, keymap_file.as_fd(), size);
 
         debug!("wait for response after keymap call");
         self.event_queue
@@ -312,7 +316,7 @@ impl Drop for Con {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 /// Stores the manager for the various protocols
 struct WaylandState {
     // interface name, global id, version
@@ -739,6 +743,8 @@ impl Keyboard for Con {
             Some(keycode) => keycode,
             None => {
                 let keycode = keymap.map_key(key)?;
+                // Apply the new keymap if there were any changes
+                self.update_keymap()?;
                 keycode
             }
         };

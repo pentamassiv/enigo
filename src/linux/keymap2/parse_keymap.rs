@@ -19,14 +19,14 @@ use crate::InputError;
 
 type Keycode = u32;
 
-pub(crate) trait Parse {
+pub trait Parse {
     fn parse(input: &str) -> IResult<&str, Self>
     where
         Self: Sized;
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
-pub(crate) struct ParsedKeymap {
+pub struct ParsedKeymap {
     keycodes: Keycodes,
     // Don't parse this, just keep it as is
     types: Option<String>,
@@ -119,7 +119,7 @@ impl TryFrom<&mut std::fs::File> for ParsedKeymap {
             error!("parsing keymap failed");
         })?;
         if !remaining.is_empty() {
-            warn!("not all of the keymap could be parsed")
+            warn!("not all of the keymap could be parsed. Remaining:\n\"{remaining}\"")
         }
         Ok(parsed_keymap)
     }

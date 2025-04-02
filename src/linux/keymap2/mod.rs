@@ -16,7 +16,7 @@ use xkeysym::Keysym;
 use crate::{InputResult, Key, keycodes::ModifierBitflag};
 
 mod parse_keymap;
-use parse_keymap::ParsedKeymap;
+pub use parse_keymap::ParsedKeymap;
 
 pub struct Keymap2 {
     context: Context,

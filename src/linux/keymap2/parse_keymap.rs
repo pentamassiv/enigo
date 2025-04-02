@@ -107,7 +107,7 @@ impl TryFrom<&mut std::fs::File> for ParsedKeymap {
             error!("unable to read file to string:\n{e}");
         })?;
 
-        debug!("{keymap_str}");
+        debug!("RECEIVED KEYMAP{keymap_str}");
 
         // Reset the cursor to the beginning of the file.
         keymap_file.seek(SeekFrom::Start(0)).map_err(|e| {

@@ -25,6 +25,7 @@ pub struct Keymap2 {
 impl Keymap2 {
     pub fn new(context: Context, format: KeymapFormat, fd: OwnedFd, size: u32) -> Result<Self, ()> {
         debug!("creating new xkb:Keymap");
+        debug!("new(format: {format}, size: {size}, ...)");
 
         let mut keymap_file = File::from(fd);
         let parsed_keymap = ParsedKeymap::try_from(&mut keymap_file).map_err(|_| {

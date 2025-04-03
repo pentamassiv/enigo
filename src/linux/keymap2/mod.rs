@@ -75,7 +75,7 @@ impl Keymap2 {
         }
         // The String cannot end with NULL otherwise xkbcommon will fail to parse it
         // keymap_string.push('\0');
-        debug!("parsed keymap serialized:\n{keymap_string}");
+        debug!("keymap string getting parsed by xkbcommon:\n{keymap_string}");
         let keymap =
             Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
                 .ok_or_else(|| {

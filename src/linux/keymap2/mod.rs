@@ -156,6 +156,7 @@ impl Keymap2 {
     }
 
     pub fn format_file_size(&self) -> Result<(KeymapFormat, File, u32), ()> {
+        // TODO: we might not be allowed to drop the file
         let mut keymap_file = tempfile::tempfile().map_err(|e| {
             error!("could not create temporary file. Error: {e}");
         })?;
@@ -194,6 +195,10 @@ impl Keymap2 {
         let key_name = Keysym::from(key).name().ok_or_else(|| {
             crate::InputError::Mapping("the key to map doesn't have a name".to_string())
         })?;
+        let key_name = match key_name.strip_prefix("XK_") {
+            Some(keyname) => keyname,
+            None => key_name,
+        };
         self.parsed_keymap.map_key(key_name)
     }
 

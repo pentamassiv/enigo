@@ -86,7 +86,7 @@ impl ParsedKeymap {
         });
 
         let symbols_string = format!(
-            "key {free_identifier} {{         [        {},           {} ] }};",
+            "{{        [        {},           {} ] }}",
             key_name, key_name
         );
         self.symbols.keys.push((free_identifier, symbols_string));

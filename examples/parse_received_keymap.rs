@@ -1,10 +1,6 @@
-use std::{
-    fs::File,
-    io::{Read as _, Write},
-};
+use std::fs::File;
 
 use enigo::ParsedKeymap;
-use log::{error, trace};
 use xkbcommon::xkb::{CONTEXT_NO_FLAGS, Context, FORMAT_TEXT_V1, KEYMAP_COMPILE_NO_FLAGS, Keymap};
 
 fn main() {
@@ -21,20 +17,31 @@ fn main() {
         panic!("file does not have the expected size! resetting the keymap");
     }
 
-    let parsed_keymap =
+    let mut parsed_keymap =
         ParsedKeymap::try_from(&mut keymap_file).expect("unable to parse the new keymap");
-    // Unfortunately we need to serialize the parsed keymap again, because the
-    // xkbcommon parser is super strict and can't handle missing newlines. Ours
-    // doesn't mind and when we serialize it, the newlines are added at the correct
-    // places so xkbcommon can parse it too
 
-    let mut keymap_string = std::fs::read_to_string("raw_keymap_file").unwrap();
+    let mut keymap_string = format!("{parsed_keymap}");
     while keymap_string.ends_with('\0') {
         println!("removed NULL byte at the end");
         keymap_string.pop();
     }
-    // keymap_string.push('\0');
-    //  println!("parsed keymap serialized:\n{keymap_string}");
+    let keymap = Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
+        .expect("unable to parse the keymap with xkbcommon! resetting the keymap");
+    // println!("{}", keymap.get_as_string(format));
+    let key = xkeysym::Keysym::from(enigo::Key::Unicode('s'));
+    let key_name = key.name().unwrap();
+    let key_name = match key_name.strip_prefix("XK_") {
+        Some(keyname) => keyname,
+        None => key_name,
+    };
+    parsed_keymap.map_key(key_name).unwrap();
+    println!("{parsed_keymap}");
+
+    let mut keymap_string = format!("{parsed_keymap}");
+    while keymap_string.ends_with('\0') {
+        println!("removed NULL byte at the end");
+        keymap_string.pop();
+    }
 
     let keymap = Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
         .expect("unable to parse the keymap with xkbcommon! resetting the keymap");

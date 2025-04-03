@@ -78,7 +78,7 @@ impl Keymap2 {
         debug!("parsed keymap serialized:\n{keymap_string}");
         let keymap =
             Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
-                .ok_or({
+                .ok_or_else(|| {
                     error!("unable to parse the keymap with xkbcommon! resetting the keymap");
                 })?;
 

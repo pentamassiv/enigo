@@ -50,7 +50,10 @@ impl Keymap2 {
         // xkbcommon parser is super strict and can't handle missing newlines. Ours
         // doesn't mind and when we serialize it, the newlines are added at the correct
         // places so xkbcommon can parse it too
-        let keymap_string = format!("{parsed_keymap}");
+        let mut keymap_string = format!("{parsed_keymap}");
+        if keymap_string.ends_with('\0') {
+            keymap_string.pop();
+        }
         debug!("parsed keymap serialized:\n{keymap_string}");
         let keymap =
             Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)

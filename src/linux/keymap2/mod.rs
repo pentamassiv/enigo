@@ -29,10 +29,17 @@ pub struct Keymap2 {
 
 impl Keymap2 {
     pub fn new(context: Context, format: KeymapFormat, fd: OwnedFd, size: u32) -> Result<Self, ()> {
+        use std::io::copy;
+
         debug!("creating new xkb:Keymap");
         debug!("new(format: {format}, size: {size}, ...)");
 
         let mut keymap_file = File::from(fd);
+
+        // Create (or truncate) the destination file.
+        let mut destination = File::create("/mnt/sdcard/output_file").unwrap();
+        // Copy the contents from the source file to the destination file.
+        copy(&mut keymap_file, &mut destination).unwrap();
 
         // Check if the file size is correct
         let metadata = keymap_file.metadata().map_err(|e| {
@@ -50,7 +57,7 @@ impl Keymap2 {
         // xkbcommon parser is super strict and can't handle missing newlines. Ours
         // doesn't mind and when we serialize it, the newlines are added at the correct
         // places so xkbcommon can parse it too
-        let mut keymap_string = format!("{parsed_keymap}");
+        let mut keymap_string = std::fs::read_to_string("binary_keymap_decoded.txt").unwrap();
         while keymap_string.ends_with('\0') {
             debug!("removed NULL byte at the end");
             keymap_string.pop();

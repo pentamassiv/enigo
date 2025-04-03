@@ -195,6 +195,7 @@ impl Keymap2 {
                 self.state
                     .key_get_one_sym(Keycode::new(k))
                     .name()
+                    .inspect(|n| println!("keysym name: {n}"))
                     .map_or(false, |name| name == key_name)
             })
             .and_then(|k| u16::try_from(k).ok())

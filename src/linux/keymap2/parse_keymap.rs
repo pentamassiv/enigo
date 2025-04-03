@@ -129,7 +129,7 @@ impl TryFrom<&mut std::fs::File> for ParsedKeymap {
         let (remaining, parsed_keymap) = ParsedKeymap::parse(&keymap_str).map_err(|_| {
             error!("parsing keymap failed");
         })?;
-        if !remaining.is_empty() || remaining == "\0" {
+        if !remaining.is_empty() && remaining != "\0" {
             warn!("not all of the keymap could be parsed. Remaining:\n\"{remaining}\"")
         }
         Ok(parsed_keymap)

@@ -48,11 +48,6 @@ impl Keymap2 {
         let parsed_keymap = ParsedKeymap::try_from(&mut keymap_file).map_err(|_| {
             trace!("unable to parse the new keymap");
         })?;
-        // Unfortunately we need to serialize the parsed keymap again, because the
-        // xkbcommon parser is super strict and can't handle missing newlines. Ours
-        // doesn't mind and when we serialize it, the newlines are added at the correct
-        // places so xkbcommon can parse it too
-
         // Read keymap to String
         let mut keymap_string = String::new();
         // Reset the cursor to the beginning of the file.
@@ -69,13 +64,12 @@ impl Keymap2 {
             error!("unable to seek from the start:\n{e}");
         })?;
 
+        // The String cannot end with NULL otherwise xkbcommon will fail to parse it
         while keymap_string.ends_with('\0') {
             debug!("removed NULL byte at the end");
             keymap_string.pop();
         }
-        // The String cannot end with NULL otherwise xkbcommon will fail to parse it
-        // keymap_string.push('\0');
-        debug!("keymap string getting parsed by xkbcommon:\n{keymap_string}");
+        trace!("keymap string getting parsed by xkbcommon:\n{keymap_string}");
         let keymap =
             Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
                 .ok_or_else(|| {

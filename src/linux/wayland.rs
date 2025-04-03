@@ -87,20 +87,29 @@ impl Con {
             .roundtrip(&mut state)
             .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
 
+        // Initialize the protocols (get the input_method, virtual_keyboard and
+        // virtual_pointer)
+        event_queue
+            .roundtrip(&mut state)
+            .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
+
+        // One extra, just to be sure
+        event_queue
+            .roundtrip(&mut state)
+            .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
+
         let mut connection = Self {
             event_queue,
             state,
             base_time: Instant::now(),
         };
 
-        connection.init_protocols()?;
-        connection
-            .update_keymap()
-            .map_err(|_| NewConError::EstablishCon("Sending the initial keymap failed"))?;
-        connection
-            .event_queue
-            .roundtrip(&mut connection.state)
-            .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
+        if connection.state.virtual_keyboard.is_some() {
+            connection
+                .update_keymap()
+                .map_err(|_| NewConError::EstablishCon("Sending the initial keymap failed"))?;
+        }
+
         connection.check_available_protocols()?;
 
         Ok(connection)
@@ -125,39 +134,6 @@ impl Con {
             error!("Failed to connect to Wayland. Try setting 'WAYLAND_DISPLAY=wayland-0'.");
             NewConError::EstablishCon("Wayland connection failed.")
         })
-    }
-
-    /// Try to set up all the protocols. An error is returned, if no protocol is
-    /// available
-    fn init_protocols(&mut self) -> Result<(), NewConError> {
-        let qh = self.event_queue.handle();
-
-        if self.state.seat.is_some() {
-            self.state.input_method =
-                self.state.im_manager.as_ref().map(|im_mgr| {
-                    im_mgr.get_input_method(self.state.seat.as_ref().unwrap(), &qh, ())
-                });
-
-            self.state.virtual_keyboard = self.state.keyboard_manager.as_ref().map(|vk_mgr| {
-                vk_mgr.create_virtual_keyboard(self.state.seat.as_ref().unwrap(), &qh, ())
-            });
-        }
-
-        // Setup virtual pointer
-        self.state.virtual_pointer = self
-            .state
-            .pointer_manager
-            .as_ref()
-            .map(|vp_mgr| vp_mgr.create_virtual_pointer(self.state.seat.as_ref(), &qh, ()));
-
-        // Wait for Activate response if the input_method was created
-        // Wait for KeyMap response if virtual_keyboard was created
-        if self.state.input_method.is_some() {
-            self.event_queue
-                .roundtrip(&mut self.state)
-                .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
-        }
-        Ok(())
     }
 
     fn check_available_protocols(&self) -> Result<(), NewConError> {
@@ -279,7 +255,6 @@ impl Con {
                 todo!() // Implement fallback (should hardcoded keymap be used here?)
             }
         };
-        // TODO: Check if it is a problem we drop the file after this function
         vk.keymap(format, keymap_file.as_fd(), size);
 
         debug!("wait for response after keymap call");
@@ -362,6 +337,33 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                 match &interface[..] {
                     "wl_seat" => {
                         let seat = registry.bind::<wl_seat::WlSeat, _, _>(name, version, qh, ());
+                        // We don't know if the seat or the im_manager is created first and we need
+                        // both to get the input_method
+                        if let Some(im_manager) = &state.im_manager {
+                            if state.input_method.is_none() {
+                                let input_method = im_manager.get_input_method(&seat, &qh, ());
+                                state.input_method = Some(input_method);
+                            }
+                        }
+                        // We don't know if the seat or the keyboard_manager is created first and we
+                        // need both to get the virtual_keyboard
+                        if let Some(keyboard_manager) = &state.keyboard_manager {
+                            if state.virtual_keyboard.is_none() {
+                                let virtual_keyboard =
+                                    keyboard_manager.create_virtual_keyboard(&seat, &qh, ());
+                                state.virtual_keyboard = Some(virtual_keyboard);
+                            }
+                        }
+                        // We don't know if the seat or the pointer_manager is created first and we
+                        // need both to get the virtual_pointer
+                        if let Some(pointer_manager) = &state.pointer_manager {
+                            if state.virtual_pointer.is_none() {
+                                let virtual_pointer =
+                                    pointer_manager.create_virtual_pointer(Some(&seat), &qh, ());
+                                state.virtual_pointer = Some(virtual_pointer);
+                            }
+                        }
+
                         state.seat = Some(seat);
                     }
                     "wl_output" => {
@@ -370,34 +372,60 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         state.outputs.push((wl_output, OutputInfo::default()));
                     }
                     "zwp_input_method_manager_v2" => {
-                        let manager = registry
+                        let im_manager = registry
                             .bind::<zwp_input_method_manager_v2::ZwpInputMethodManagerV2, _, _>(
-                                name,
-                                version,
-                                qh,
-                                (),
-                            );
-                        state.im_manager = Some(manager);
+                            name,
+                            version,
+                            qh,
+                            (),
+                        );
+                        // We don't know if the seat or the im_manager is created first and we need
+                        // both to get the input_method
+                        if let Some(seat) = &state.seat {
+                            if state.input_method.is_none() {
+                                let input_method = im_manager.get_input_method(&seat, &qh, ());
+                                state.input_method = Some(input_method);
+                            }
+                        }
+                        state.im_manager = Some(im_manager);
                     }
                     "zwp_virtual_keyboard_manager_v1" => {
-                        let manager = registry
+                        let keyboard_manager = registry
                         .bind::<zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1, _, _>(
                         name,
                         version,
                         qh,
                         (),
                     );
-                        state.keyboard_manager = Some(manager);
+                        // We don't know if the seat or the keyboard_manager is created first and we
+                        // need both to get the virtual_keyboard
+                        if let Some(seat) = &state.seat {
+                            if state.virtual_keyboard.is_none() {
+                                let virtual_keyboard =
+                                    keyboard_manager.create_virtual_keyboard(seat, &qh, ());
+                                state.virtual_keyboard = Some(virtual_keyboard);
+                            }
+                        }
+                        state.keyboard_manager = Some(keyboard_manager);
                     }
                     "zwlr_virtual_pointer_manager_v1" => {
-                        let manager = registry
+                        let pointer_manager = registry
                         .bind::<zwlr_virtual_pointer_manager_v1::ZwlrVirtualPointerManagerV1, _, _>(
                         name,
                         version,
                         qh,
                         (),
                     );
-                        state.pointer_manager = Some(manager);
+                        // We don't know if the seat or the pointer_manager is created first and we
+                        // need both to get the virtual_pointer
+                        if let Some(seat) = &state.seat {
+                            if state.virtual_pointer.is_none() {
+                                let virtual_pointer =
+                                    pointer_manager.create_virtual_pointer(Some(&seat), &qh, ());
+                                state.virtual_pointer = Some(virtual_pointer);
+                            }
+                        }
+                        state.pointer_manager = Some(pointer_manager);
                     }
                     _ => {}
                 }

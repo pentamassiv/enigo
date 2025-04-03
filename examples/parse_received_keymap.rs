@@ -28,24 +28,36 @@ fn main() {
     let keymap = Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
         .expect("unable to parse the keymap with xkbcommon! resetting the keymap");
     // println!("{}", keymap.get_as_string(format));
-    let key = xkeysym::Keysym::from(enigo::Key::Unicode('s'));
-    let key_name = key.name().unwrap();
-    let key_name = match key_name.strip_prefix("XK_") {
-        Some(keyname) => keyname,
-        None => key_name,
+    let key = enigo::Key::Unicode('s');
+
+    // fn key_to_keycode()
+    let Some(key_name) = xkeysym::Keysym::from(key).name() else {
+        println!("the key to map doesn't have a name");
+        return;
     };
-    parsed_keymap.map_key(key_name, true).unwrap();
-    println!("{parsed_keymap}");
 
-    let mut keymap_string = format!("{parsed_keymap}");
-    while keymap_string.ends_with('\0') {
-        println!("removed NULL byte at the end");
-        keymap_string.pop();
-    }
+    let key_name = match key_name.strip_prefix("XK_") {
+        Some(keyname) => {
+            println!("had prefix");
+            keyname
+        }
+        None => {
+            println!("didnt have prefix");
+            key_name
+        }
+    };
 
-    let keymap = Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
-        .expect("unable to parse the keymap with xkbcommon! resetting the keymap");
-    // println!("{}", keymap.get_as_string(format));
+    println!("key name: {key_name}");
+    let key_name = "AC02";
+    let keycode = keymap.key_by_name(key_name);
+    println!("key_by_name: {keycode:?}");
+    let keycode = keycode
+        .map(|k| {
+            println!("keycode: {k:?}");
+            k.raw()
+        })
+        .and_then(|raw| u16::try_from(raw).ok());
+    println!("keycode: {keycode:?}");
 }
 
 /*

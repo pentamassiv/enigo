@@ -190,10 +190,14 @@ impl Keymap2 {
             None => key_name,
         };
 
-        self.keymap
-            .key_by_name(key_name)
-            .map(|k| k.raw())
-            .and_then(|raw| u16::try_from(raw).ok())
+        (self.keymap.min_keycode().raw()..self.keymap.max_keycode().raw())
+            .find(|&k| {
+                self.state
+                    .key_get_one_sym(Keycode::new(k))
+                    .name()
+                    .map_or(false, |name| name == key_name)
+            })
+            .and_then(|k| u16::try_from(k).ok())
     }
 
     pub fn map_key(&mut self, key: Key) -> InputResult<u16> {

@@ -186,9 +186,19 @@ impl Keymap2 {
     }
 
     pub fn key_to_keycode(&self, key: Key) -> Option<u16> {
-        Keysym::from(key)
-            .name()
-            .and_then(|name| self.keymap.key_by_name(name).map(|k| k.raw()))
+        let Some(key_name) = Keysym::from(key).name() else {
+            error!("the key to map doesn't have a name");
+            return None;
+        };
+
+        let key_name = match key_name.strip_prefix("XK_") {
+            Some(keyname) => keyname,
+            None => key_name,
+        };
+
+        self.keymap
+            .key_by_name(key_name)
+            .map(|k| k.raw())
             .and_then(|raw| u16::try_from(raw).ok())
     }
 

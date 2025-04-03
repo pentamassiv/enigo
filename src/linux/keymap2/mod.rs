@@ -185,11 +185,6 @@ impl Keymap2 {
             return None;
         };
 
-        let key_name = match key_name.strip_prefix("XK_") {
-            Some(keyname) => keyname,
-            None => key_name,
-        };
-
         (self.keymap.min_keycode().raw()..self.keymap.max_keycode().raw())
             .find(|&k| {
                 self.state

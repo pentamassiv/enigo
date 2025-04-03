@@ -199,7 +199,7 @@ impl Keymap2 {
             Some(keyname) => keyname,
             None => key_name,
         };
-        self.parsed_keymap.map_key(key_name)
+        self.parsed_keymap.map_key(key_name, true)
     }
 
     /*

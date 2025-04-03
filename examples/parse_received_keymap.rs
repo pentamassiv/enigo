@@ -34,7 +34,7 @@ fn main() {
         Some(keyname) => keyname,
         None => key_name,
     };
-    parsed_keymap.map_key(key_name).unwrap();
+    parsed_keymap.map_key(key_name, true).unwrap();
     println!("{parsed_keymap}");
 
     let mut keymap_string = format!("{parsed_keymap}");
@@ -45,7 +45,7 @@ fn main() {
 
     let keymap = Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)
         .expect("unable to parse the keymap with xkbcommon! resetting the keymap");
-    println!("{}", keymap.get_as_string(format));
+    // println!("{}", keymap.get_as_string(format));
 }
 
 /*

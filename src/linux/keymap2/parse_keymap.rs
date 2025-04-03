@@ -41,9 +41,16 @@ impl ParsedKeymap {
     /// Try to find an unused keycode and identifier to map the provided keyname
     /// to. Returns the keycode the key is now mapped to
     // TODO: Add tests for this function
-    pub fn map_key(&mut self, key_name: &str) -> crate::InputResult<u16> {
+    pub fn map_key(&mut self, key_name: &str, is_wayland: bool) -> crate::InputResult<u16> {
+        // Even if the mimimum is 8, never use 8. This is because 8 is special. 8-8=0
+        // and the value 0 stands for "NoSymbol". Some clients disregard the keymap and
+        // always interpret keycode 8 as NoSymbol.
+        let minimum = self.keycodes.minimum.max(9);
+        // Maximum on X11 is 255, but on Wayland we can use keycodes up to u16::MAX
+        let maximum = if is_wayland { u16::MAX as u32 } else { 255 };
+
         // Find an unused keycode
-        let free_keycode_u32 = (self.keycodes.minimum..self.keycodes.maximum)
+        let free_keycode_u32 = (minimum..maximum)
             .find(|raw| {
                 !self
                     .keycodes
@@ -85,12 +92,11 @@ impl ParsedKeymap {
             code: free_keycode_u32,
         });
 
-        let symbols_string = format!(
-            "{{        [        {},           {} ] }}",
-            key_name, key_name
-        );
+        let symbols_string = format!("{{\t[ {}, {} ] }}", key_name, key_name);
         self.symbols.keys.push((free_identifier, symbols_string));
 
+        // Update the maximum if it is needed
+        self.keycodes.maximum = self.keycodes.maximum.max(free_keycode_u32);
         free_keycode_u16
     }
 }

@@ -51,9 +51,11 @@ impl Keymap2 {
         // doesn't mind and when we serialize it, the newlines are added at the correct
         // places so xkbcommon can parse it too
         let mut keymap_string = format!("{parsed_keymap}");
-        if keymap_string.ends_with('\0') {
+        while keymap_string.ends_with('\0') {
+            debug!("removed NULL byte at the end");
             keymap_string.pop();
         }
+        keymap_string.push('\0');
         debug!("parsed keymap serialized:\n{keymap_string}");
         let keymap =
             Keymap::new_from_string(&context, keymap_string, format, KEYMAP_COMPILE_NO_FLAGS)

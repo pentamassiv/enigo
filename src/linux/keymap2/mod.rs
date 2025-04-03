@@ -29,6 +29,8 @@ pub struct Keymap2 {
 
 impl Keymap2 {
     pub fn new(context: Context, format: KeymapFormat, fd: OwnedFd, size: u32) -> Result<Self, ()> {
+        use std::io::{Read, Seek, SeekFrom};
+
         debug!("creating new xkb:Keymap");
         debug!("new(format: {format}, size: {size}, ...)");
 
@@ -53,11 +55,19 @@ impl Keymap2 {
 
         // Read keymap to String
         let mut keymap_string = String::new();
+        // Reset the cursor to the beginning of the file.
+        keymap_file.seek(SeekFrom::Start(0)).map_err(|e| {
+            error!("unable to seek from the start:\n{e}");
+        })?;
         keymap_file
             .read_to_string(&mut keymap_string)
             .map_err(|e| {
                 error!("unable to read file to string:\n{e}");
             })?;
+        // Reset the cursor to the beginning of the file.
+        keymap_file.seek(SeekFrom::Start(0)).map_err(|e| {
+            error!("unable to seek from the start:\n{e}");
+        })?;
 
         while keymap_string.ends_with('\0') {
             debug!("removed NULL byte at the end");

@@ -50,7 +50,15 @@ impl Keymap2 {
         // xkbcommon parser is super strict and can't handle missing newlines. Ours
         // doesn't mind and when we serialize it, the newlines are added at the correct
         // places so xkbcommon can parse it too
-        let mut keymap_string = std::fs::read_to_string("binary_keymap_decoded.txt").unwrap();
+
+        // Read keymap to String
+        let mut keymap_string = String::new();
+        keymap_file
+            .read_to_string(&mut keymap_string)
+            .map_err(|e| {
+                error!("unable to read file to string:\n{e}");
+            })?;
+
         while keymap_string.ends_with('\0') {
             debug!("removed NULL byte at the end");
             keymap_string.pop();

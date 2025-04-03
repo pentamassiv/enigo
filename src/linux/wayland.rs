@@ -167,6 +167,7 @@ impl Con {
     /// # Errors
     /// TODO
     fn send_key_event(&mut self, keycode: Keycode, direction: Direction) -> InputResult<()> {
+        trace!("send_key_event(&mut self, keycode: {keycode}, direction: {direction:?})");
         let vk = self
             .state
             .virtual_keyboard
@@ -176,31 +177,25 @@ impl Con {
 
         let time = self.get_time();
         let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
+        let (direction_wayland, direction_xkb) = match direction {
+            Direction::Press => (1, xkb::KeyDirection::Down),
+            Direction::Release => (0, xkb::KeyDirection::Up),
+            Direction::Click => {
+                return Err(InputError::Simulate(
+                    "impossible direction, this should never be possible. This function must never be called with Direction::Click",
+                ));
+            }
+        };
 
-        if direction == Direction::Press || direction == Direction::Click {
-            trace!("vk.key({time}, {keycode}, 1)");
-            vk.key(time, keycode, 1);
-            // Update keymap state
-            self.state
-                .seat_keymap
-                .as_mut()
-                .ok_or(InputError::Simulate("no keymap available"))?
-                .update_key(xkb::Keycode::new(keycode), xkb::KeyDirection::Down);
+        vk.key(time, keycode, direction_wayland);
+        // Update keymap state
+        self.state
+            .seat_keymap
+            .as_mut()
+            .ok_or(InputError::Simulate("no keymap available"))?
+            .update_key(xkb::Keycode::new(keycode), direction_xkb);
 
-            self.flush()?;
-        }
-        if direction == Direction::Release || direction == Direction::Click {
-            trace!("vk.key({time}, {keycode}, 0)");
-            vk.key(time, keycode, 0);
-            // Update keymap state
-            self.state
-                .seat_keymap
-                .as_mut()
-                .ok_or(InputError::Simulate("no keymap available"))?
-                .update_key(xkb::Keycode::new(keycode), xkb::KeyDirection::Up);
-
-            self.flush()?;
-        }
+        self.flush()?;
         Ok(())
     }
 
@@ -795,7 +790,7 @@ impl Keyboard for Con {
                     trace!("it is a modifier: {modifier_bitflag:?}");
                     self.send_modifier_event(modifier_bitflag)?
                 }
-                None => self.send_key_event(keycode.into(), direction)?,
+                None => self.send_key_event(keycode.into(), Direction::Press)?,
             }
         }
         if direction == Direction::Click || direction == Direction::Release {

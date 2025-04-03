@@ -94,6 +94,13 @@ impl Con {
         };
 
         connection.init_protocols()?;
+        connection
+            .update_keymap()
+            .map_err(|_| NewConError::EstablishCon("Sending the initial keymap failed"))?;
+        connection
+            .event_queue
+            .roundtrip(&mut connection.state)
+            .map_err(|_| NewConError::EstablishCon("Wayland roundtrip failed"))?;
         connection.check_available_protocols()?;
 
         Ok(connection)
@@ -726,13 +733,6 @@ impl Keyboard for Con {
     }
 
     fn key(&mut self, key: Key, direction: Direction) -> InputResult<()> {
-        // Update keymap in case it was changed in the meantime
-        // TODO: Is it possible another process changes the keymap of the virtual
-        // keyboard? Otherwise this is not needed
-        self.event_queue
-            .roundtrip(&mut self.state)
-            .map_err(|_| InputError::Simulate("Wayland roundtrip failed"))?;
-
         let keymap = self
             .state
             .seat_keymap

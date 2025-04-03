@@ -180,8 +180,9 @@ impl Keymap2 {
     }
 
     pub fn is_modifier(&self, keycode: u16) -> Option<ModifierBitflag> {
-        debug!("updating xkb:Keymap");
-        todo!()
+        debug!("is_modifier(&self, keycode: {keycode})");
+        // TODO: Implement this correctly
+        None
     }
 
     pub fn key_to_keycode(&self, key: Key) -> Option<u16> {

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use log::{debug, error, trace, warn};
+use log::{error, trace, warn};
 use nom::{
     IResult, Parser,
     branch::permutation,

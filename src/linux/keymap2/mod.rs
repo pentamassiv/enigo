@@ -1,9 +1,4 @@
-use std::{
-    collections::HashSet,
-    fs::File,
-    io::{Read as _, Write as _},
-    os::fd::OwnedFd,
-};
+use std::{collections::HashSet, fs::File, io::Write as _, os::fd::OwnedFd};
 
 use log::{debug, error, trace};
 use xkbcommon::xkb::{
@@ -206,38 +201,6 @@ impl Keymap2 {
         };
         self.parsed_keymap.map_key(key_name, true)
     }
-
-    /*
-    fn new_xkb_keymap(
-        context: &Context,
-        format: KeymapFormat,
-        keymap_file: &mut File,
-        size: u32,
-    ) -> Result<Keymap, ()> {
-        // Check if the file size is correct.
-        let metadata = keymap_file.metadata().map_err(|e| {
-            error!("could not get the file's metadata! Skipping file size check. Error: {e}");
-        })?;
-        if metadata.len() != size.into() {
-            error!("file does not have the expected size! resetting the keymap");
-            return Err(());
-        }
-
-        let flags = KEYMAP_COMPILE_NO_FLAGS;
-
-        // There is a difference between reading the string from the file and creating
-        // the keymap from the string and directly creating the keymap from a file. The
-        // difference is in the first bytes of the file
-        let mut file_content = String::new();
-        keymap_file
-            .read_to_string(&mut file_content)
-            .ok()
-            .and_then(|_| {
-                Keymap::new_from_string(&context, file_content, format, KEYMAP_COMPILE_NO_FLAGS)
-            })
-            .or_else(|| Keymap::new_from_file(context, keymap_file, format, flags))
-            .ok_or_else(|| error!("Creating xkb::Keymap failed! resetting the keymap"))
-    }*/
 }
 
 impl Default for Keymap2 {

@@ -561,6 +561,8 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
                     "WlKeyboard received event:\nwl_keyboard::Event::Keymap {{ {format:?}, {fd:?}, {size} }}"
                 );
 
+                std::thread::sleep(std::time::Duration::from_secs(4)); // TODO: Sometimes the received keymap is displayed as empty, but it seems to be a timing issue. The file has the proper size. Try to sleep here to avoid the race condition
+
                 // Get the received format
                 let format = match format {
                     WEnum::Value(format) => format as xkb::KeymapFormat,

@@ -742,6 +742,7 @@ impl Keyboard for Con {
         let keycode = match keymap.key_to_keycode(key) {
             Some(keycode) => keycode,
             None => {
+                debug!("keycode for key {key:?} was not found");
                 let keycode = keymap.map_key(key)?;
                 // Apply the new keymap if there were any changes
                 self.update_keymap()?;

@@ -193,7 +193,6 @@ impl Keymap2 {
     }
 
     pub fn format_file_size(&self) -> Result<(KeymapFormat, File, u32), ()> {
-        // TODO: we might not be allowed to drop the file
         let mut keymap_file = tempfile::tempfile().map_err(|e| {
             error!("could not create temporary file. Error: {e}");
         })?;
@@ -227,7 +226,6 @@ impl Keymap2 {
                 self.state
                     .key_get_one_sym(Keycode::new(k))
                     .name()
-                    .inspect(|n| println!("keysym name: {n}"))
                     .map_or(false, |name| name == key_name)
             })
             .and_then(|k| u16::try_from(k).ok())

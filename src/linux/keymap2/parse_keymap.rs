@@ -65,7 +65,6 @@ impl ParsedKeymap {
         // Find an unused identifier
         let free_identifier = (0..=9999)
             .rev()
-            .into_iter()
             .map(|idx| format!("{idx:0>4}"))
             .filter(|potential_identifier_name| {
                 !self
@@ -92,7 +91,7 @@ impl ParsedKeymap {
             code: free_keycode_u32,
         });
 
-        let symbols_string = format!("{{\t[ {}, {} ] }}", key_name, key_name);
+        let symbols_string = format!("{{\t[ {key_name}, {key_name} ] }}");
         self.symbols.keys.push((free_identifier, symbols_string));
 
         // Update the maximum if it is needed
@@ -130,7 +129,7 @@ impl TryFrom<&mut std::fs::File> for ParsedKeymap {
             error!("parsing keymap failed");
         })?;
         if !remaining.is_empty() && remaining != "\0" {
-            warn!("not all of the keymap could be parsed. Remaining:\n\"{remaining}\"")
+            warn!("not all of the keymap could be parsed. Remaining:\n\"{remaining}\"");
         }
         Ok(parsed_keymap)
     }
@@ -139,17 +138,17 @@ impl TryFrom<&mut std::fs::File> for ParsedKeymap {
 impl Display for ParsedKeymap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "xkb_keymap {{")?;
-        write!(f, "{}\n", self.keycodes)?;
+        writeln!(f, "{}", self.keycodes)?;
         if let Some(types) = &self.types {
-            write!(f, "xkb_types {types}\n}};\n\n",)?;
+            writeln!(f, "xkb_types {types}\n}};\n",)?;
         }
         if let Some(compatibility) = &self.compatibility {
-            write!(f, "xkb_compatibility {compatibility}\n}};\n\n")?;
+            writeln!(f, "xkb_compatibility {compatibility}\n}};\n")?;
         }
-        write!(f, "{}\n", self.symbols)?;
+        writeln!(f, "{}", self.symbols)?;
 
         if let Some(geometry) = &self.geometry {
-            write!(f, "xkb_geometry {geometry}\n}};\n\n")?;
+            writeln!(f, "xkb_geometry {geometry}\n}};\n")?;
         }
         writeln!(f, "}};")
     }
@@ -249,7 +248,7 @@ impl Parse for Keycodes {
 
         let mut max_len_identifier = 0;
         for KeycodeEntry { identifier, .. } in &keycodes {
-            max_len_identifier = max_len_identifier.max(identifier.identifier.len())
+            max_len_identifier = max_len_identifier.max(identifier.identifier.len());
         }
         Ok((
             remaining,
@@ -393,11 +392,11 @@ struct Symbols {
 impl Display for Symbols {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "xkb_symbols {} {{", self.name)?;
-        writeln!(f, "")?;
+        writeln!(f)?;
         for (idx, group) in self.groups.iter().enumerate() {
             writeln!(f, "    name[group{}]={group};", idx + 1)?;
         }
-        writeln!(f, "")?;
+        writeln!(f)?;
         for (key_id, key_def) in &self.keys {
             write!(f, "    key ")?;
             // Leftpad
@@ -429,7 +428,7 @@ impl Parse for Symbols {
         .map(|(id, s)| (id, s.to_string()));
         let modifier_map_parser =
             delimited(ws(tag("modifier_map ")), take_until(";"), ws(tag(";")))
-                .map(|s| s.to_string());
+                .map(std::string::ToString::to_string);
         let content_parser = permutation((
             many0(groups_parser),
             many0(key_parser),
@@ -441,7 +440,7 @@ impl Parse for Symbols {
 
         let mut max_len_identifier = 0;
         for (key_id, _) in &keys {
-            max_len_identifier = max_len_identifier.max(key_id.identifier.len())
+            max_len_identifier = max_len_identifier.max(key_id.identifier.len());
         }
         Ok((
             remaining,
@@ -456,7 +455,7 @@ impl Parse for Symbols {
     }
 }
 
-fn parse_section<'a, 'b>(input: &'a str, struct_tag: &'b str) -> IResult<&'a str, Name> {
+fn parse_section<'a>(input: &'a str, struct_tag: &str) -> IResult<&'a str, Name> {
     delimited(ws(tag(struct_tag)), Name::parse, ws(tag("{"))).parse(input)
 }
 

@@ -43,7 +43,7 @@ impl Keymap2 {
             return Err(());
         }
 
-        let parsed_keymap = ParsedKeymap::try_from(&mut keymap_file).map_err(|_| {
+        let parsed_keymap = ParsedKeymap::try_from(&mut keymap_file).map_err(|()| {
             trace!("unable to parse the new keymap");
         })?;
         // Read keymap to String
@@ -102,7 +102,7 @@ impl Keymap2 {
             parsed_keymap,
             pressed_keys,
             keymap_file,
-        } = Self::new(self.context.clone(), format, fd, size).map_err(|_| {
+        } = Self::new(self.context.clone(), format, fd, size).map_err(|()| {
             trace!("unable to create new keymap");
         })?;
 
@@ -150,7 +150,7 @@ impl Keymap2 {
             KeyDirection::Down => {
                 self.pressed_keys.insert(keycode);
             }
-        };
+        }
         self.state.update_key(keycode, direction);
 
         let depressed_mods_new = self.state.serialize_mods(STATE_MODS_DEPRESSED);
@@ -224,12 +224,7 @@ impl Keymap2 {
         };
 
         (self.keymap.min_keycode().raw()..self.keymap.max_keycode().raw())
-            .find(|&k| {
-                self.state
-                    .key_get_one_sym(Keycode::new(k))
-                    .name()
-                    .map_or(false, |name| name == key_name)
-            })
+            .find(|&k| self.state.key_get_one_sym(Keycode::new(k)).name() == Some(key_name))
             .and_then(|k| u16::try_from(k).ok())
     }
 
@@ -238,7 +233,7 @@ impl Keymap2 {
             crate::InputError::Mapping("the key to map doesn't have a name".to_string())
         })?;
         let key_name = match key_name.strip_prefix("XK_") {
-            Some(keyname) => keyname,
+            Some(key_name) => key_name,
             None => key_name,
         };
         self.parsed_keymap.map_key(key_name, true)
@@ -249,7 +244,7 @@ impl Keymap2 {
         let mut keymap_file = tempfile::tempfile().map_err(|e| {
             error!("could not create temporary file. Error: {e}");
         })?;
-        write!(keymap_file, "{}", DEFAULT_KEYMAP).map_err(|e| {
+        write!(keymap_file, "{DEFAULT_KEYMAP}").map_err(|e| {
             error!("could not write DEFAULT KEYMAP to temporary file. Error: {e}");
         })?;
         let metadata = keymap_file.metadata().map_err(|e| {

@@ -315,6 +315,7 @@ struct WaylandState {
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
+    #[allow(clippy::too_many_lines)]
     fn event(
         state: &mut Self,
         registry: &wl_registry::WlRegistry,
@@ -338,7 +339,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         // both to get the input_method
                         if let Some(im_manager) = &state.im_manager {
                             if state.input_method.is_none() {
-                                let input_method = im_manager.get_input_method(&seat, &qh, ());
+                                let input_method = im_manager.get_input_method(&seat, qh, ());
                                 state.input_method = Some(input_method);
                             }
                         }
@@ -347,7 +348,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         if let Some(keyboard_manager) = &state.keyboard_manager {
                             if state.virtual_keyboard.is_none() {
                                 let virtual_keyboard =
-                                    keyboard_manager.create_virtual_keyboard(&seat, &qh, ());
+                                    keyboard_manager.create_virtual_keyboard(&seat, qh, ());
                                 state.virtual_keyboard = Some(virtual_keyboard);
                             }
                         }
@@ -356,7 +357,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         if let Some(pointer_manager) = &state.pointer_manager {
                             if state.virtual_pointer.is_none() {
                                 let virtual_pointer =
-                                    pointer_manager.create_virtual_pointer(Some(&seat), &qh, ());
+                                    pointer_manager.create_virtual_pointer(Some(&seat), qh, ());
                                 state.virtual_pointer = Some(virtual_pointer);
                             }
                         }
@@ -380,7 +381,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         // both to get the input_method
                         if let Some(seat) = &state.seat {
                             if state.input_method.is_none() {
-                                let input_method = im_manager.get_input_method(&seat, &qh, ());
+                                let input_method = im_manager.get_input_method(seat, qh, ());
                                 state.input_method = Some(input_method);
                             }
                         }
@@ -399,7 +400,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         if let Some(seat) = &state.seat {
                             if state.virtual_keyboard.is_none() {
                                 let virtual_keyboard =
-                                    keyboard_manager.create_virtual_keyboard(seat, &qh, ());
+                                    keyboard_manager.create_virtual_keyboard(seat, qh, ());
                                 state.virtual_keyboard = Some(virtual_keyboard);
                             }
                         }
@@ -418,7 +419,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                         if let Some(seat) = &state.seat {
                             if state.virtual_pointer.is_none() {
                                 let virtual_pointer =
-                                    pointer_manager.create_virtual_pointer(Some(&seat), &qh, ());
+                                    pointer_manager.create_virtual_pointer(Some(seat), qh, ());
                                 state.virtual_pointer = Some(virtual_pointer);
                             }
                         }
@@ -519,7 +520,7 @@ impl Dispatch<zwp_input_method_v2::ZwpInputMethodV2, ()> for WaylandState {
         match event {
             zwp_input_method_v2::Event::Done => {
                 debug!("ZwpInputMethodV2 received event:\nzwp_input_method_v2::Event::Done");
-                state.im_serial += Wrapping(1u32)
+                state.im_serial += Wrapping(1u32);
             }
             zwp_input_method_v2::Event::Activate
             | zwp_input_method_v2::Event::Deactivate
@@ -534,7 +535,7 @@ impl Dispatch<zwp_input_method_v2::ZwpInputMethodV2, ()> for WaylandState {
                 purpose: _,
             }
             | zwp_input_method_v2::Event::Unavailable => {
-                trace!("ZwpInputMethodV2 received irrelevant event:\n{event:?}")
+                trace!("ZwpInputMethodV2 received irrelevant event:\n{event:?}");
             }
             _ => warn!("ZwpInputMethodV2 received unknown event:\n{event:?}"),
         }
@@ -594,25 +595,21 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
                 );
 
                 // Get the received format
-                let format = match format {
-                    WEnum::Value(format) => format as xkb::KeymapFormat,
-                    _ => {
-                        error!("invalid format received! resetting the keymap");
-                        state.seat_keymap = None;
-                        return;
-                    }
+                let format = if let WEnum::Value(format) = format {
+                    format as xkb::KeymapFormat
+                } else {
+                    error!("invalid format received! resetting the keymap");
+                    state.seat_keymap = None;
+                    return;
                 };
 
-                match &mut state.seat_keymap {
-                    Some(keymap) => {
-                        if keymap.update(format, fd, size).is_err() {
-                            state.seat_keymap = None
-                        }
+                if let Some(keymap) = &mut state.seat_keymap {
+                    if keymap.update(format, fd, size).is_err() {
+                        state.seat_keymap = None;
                     }
-                    None => {
-                        let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
-                        state.seat_keymap = Keymap2::new(context, format, fd, size).ok()
-                    }
+                } else {
+                    let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+                    state.seat_keymap = Keymap2::new(context, format, fd, size).ok();
                 }
             }
             wl_keyboard::Event::Modifiers {
@@ -639,7 +636,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
             | wl_keyboard::Event::Leave { .. }
             | wl_keyboard::Event::Key { .. }
             | wl_keyboard::Event::RepeatInfo { .. } => {
-                debug!("WlKeyboard received irrelevant event:\n{event:?}")
+                debug!("WlKeyboard received irrelevant event:\n{event:?}");
             }
             _ => warn!("WlKeyboard received unknown event:\n{event:?}"),
         }
@@ -706,7 +703,7 @@ impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
             | wl_output::Event::Scale { factor: _ }
             | wl_output::Event::Name { name: _ }
             | wl_output::Event::Description { description: _ } => {
-                trace!("WlOutput received irrelevant event:\n{event:?}")
+                trace!("WlOutput received irrelevant event:\n{event:?}");
             }
             _ => warn!("WlOutput received unknown event:\n{event:?}"),
         }
@@ -780,15 +777,14 @@ impl Keyboard for Con {
             .as_mut()
             .ok_or(InputError::Simulate("no keymap available"))?;
 
-        let keycode = match keymap.key_to_keycode(key) {
-            Some(keycode) => keycode,
-            None => {
-                debug!("keycode for key {key:?} was not found");
-                let keycode = keymap.map_key(key)?;
-                // Apply the new keymap if there were any changes
-                self.update_keymap()?;
-                keycode
-            }
+        let keycode = if let Some(keycode) = keymap.key_to_keycode(key) {
+            keycode
+        } else {
+            debug!("keycode for key {key:?} was not found");
+            let keycode = keymap.map_key(key)?;
+            // Apply the new keymap if there were any changes
+            self.update_keymap()?;
+            keycode
         };
         self.raw(keycode, direction)
     }
@@ -814,9 +810,9 @@ impl Keyboard for Con {
                     latched_mods_new,
                     locked_mods_new,
                     effective_layout_new,
-                )?
+                )?;
             } else {
-                self.send_key_event(keycode.into(), Direction::Press)?
+                self.send_key_event(keycode.into(), Direction::Press)?;
             }
         }
         if direction == Direction::Click || direction == Direction::Release {
@@ -839,9 +835,9 @@ impl Keyboard for Con {
                     latched_mods_new,
                     locked_mods_new,
                     effective_layout_new,
-                )?
+                )?;
             } else {
-                self.send_key_event(keycode.into(), Direction::Press)?
+                self.send_key_event(keycode.into(), Direction::Press)?;
             }
         }
         Ok(())

@@ -2,17 +2,19 @@ use std::{collections::HashSet, fs::File, io::Write as _, os::fd::OwnedFd};
 
 use log::{debug, error, trace};
 use xkbcommon::xkb::{
-    Context, KEYMAP_COMPILE_NO_FLAGS, KEYMAP_FORMAT_TEXT_V1, KeyDirection, Keycode, Keymap,
-    KeymapFormat, LayoutIndex, LayoutMask, ModMask, STATE_LAYOUT_DEPRESSED, STATE_LAYOUT_EFFECTIVE,
-    STATE_LAYOUT_LATCHED, STATE_LAYOUT_LOCKED, STATE_MODS_DEPRESSED, STATE_MODS_EFFECTIVE,
+    CONTEXT_NO_FLAGS, Context, KEYMAP_COMPILE_NO_FLAGS, KEYMAP_FORMAT_TEXT_V1, KeyDirection,
+    Keycode, Keymap, KeymapFormat, LayoutIndex, LayoutMask, ModMask, STATE_LAYOUT_DEPRESSED,
+    STATE_LAYOUT_EFFECTIVE, STATE_LAYOUT_LATCHED, STATE_LAYOUT_LOCKED, STATE_MODS_DEPRESSED,
     STATE_MODS_LATCHED, STATE_MODS_LOCKED, State,
 };
 use xkeysym::Keysym;
 
-use crate::{InputResult, Key, keycodes::ModifierBitflag};
+use crate::{InputResult, Key};
 
 mod parse_keymap;
 pub use parse_keymap::ParsedKeymap;
+mod default_keymap;
+use default_keymap::DEFAULT_KEYMAP;
 
 pub struct Keymap2 {
     context: Context,
@@ -241,10 +243,29 @@ impl Keymap2 {
         };
         self.parsed_keymap.map_key(key_name, true)
     }
-}
 
-impl Default for Keymap2 {
-    fn default() -> Self {
-        todo!()
+    pub fn default() -> Result<Self, ()> {
+        debug!("Default keymap is used");
+        let mut keymap_file = tempfile::tempfile().map_err(|e| {
+            error!("could not create temporary file. Error: {e}");
+        })?;
+        write!(keymap_file, "{}", DEFAULT_KEYMAP).map_err(|e| {
+            error!("could not write DEFAULT KEYMAP to temporary file. Error: {e}");
+        })?;
+        let metadata = keymap_file.metadata().map_err(|e| {
+            error!("could not get the file's metadata! Error: {e}");
+        })?;
+        let size = metadata.len().try_into().map_err(|_| {
+            error!(
+                "keymap file is {} but the maximum is {} (u32::MAX)",
+                metadata.len(),
+                u32::MAX
+            );
+        })?;
+
+        let format = KEYMAP_FORMAT_TEXT_V1;
+        let context = Context::new(CONTEXT_NO_FLAGS);
+
+        Self::new(context, format, keymap_file.into(), size)
     }
 }

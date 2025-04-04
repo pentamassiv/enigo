@@ -3,8 +3,9 @@ use std::{collections::HashSet, fs::File, io::Write as _, os::fd::OwnedFd};
 use log::{debug, error, trace};
 use xkbcommon::xkb::{
     Context, KEYMAP_COMPILE_NO_FLAGS, KEYMAP_FORMAT_TEXT_V1, KeyDirection, Keycode, Keymap,
-    KeymapFormat, STATE_LAYOUT_DEPRESSED, STATE_LAYOUT_LATCHED, STATE_LAYOUT_LOCKED,
-    STATE_MODS_DEPRESSED, STATE_MODS_LATCHED, STATE_MODS_LOCKED, State,
+    KeymapFormat, LayoutIndex, LayoutMask, ModMask, STATE_LAYOUT_DEPRESSED, STATE_LAYOUT_EFFECTIVE,
+    STATE_LAYOUT_LATCHED, STATE_LAYOUT_LOCKED, STATE_MODS_DEPRESSED, STATE_MODS_EFFECTIVE,
+    STATE_MODS_LATCHED, STATE_MODS_LOCKED, State,
 };
 use xkeysym::Keysym;
 
@@ -127,7 +128,19 @@ impl Keymap2 {
         Ok(())
     }
 
-    pub fn update_key(&mut self, keycode: Keycode, direction: KeyDirection) {
+    /// Update the state and return the new bitflags for the modifiers and the
+    /// effective layout if they changed. If they remained the same, None is
+    /// returned
+    pub fn update_key(
+        &mut self,
+        keycode: Keycode,
+        direction: KeyDirection,
+    ) -> Option<(ModMask, ModMask, ModMask, LayoutMask)> {
+        let depressed_mods_old = self.state.serialize_mods(STATE_MODS_DEPRESSED);
+        let latched_mods_old = self.state.serialize_mods(STATE_MODS_LATCHED);
+        let locked_mods_old = self.state.serialize_mods(STATE_MODS_LOCKED);
+        let effective_layout_old = self.state.serialize_layout(STATE_LAYOUT_EFFECTIVE);
+
         match direction {
             KeyDirection::Up => {
                 self.pressed_keys.remove(&keycode);
@@ -137,11 +150,46 @@ impl Keymap2 {
             }
         };
         self.state.update_key(keycode, direction);
+
+        let depressed_mods_new = self.state.serialize_mods(STATE_MODS_DEPRESSED);
+        let latched_mods_new = self.state.serialize_mods(STATE_MODS_LATCHED);
+        let locked_mods_new = self.state.serialize_mods(STATE_MODS_LOCKED);
+        let effective_layout_new = self.state.serialize_layout(STATE_LAYOUT_EFFECTIVE);
+
+        if depressed_mods_old != depressed_mods_new
+            || latched_mods_old != latched_mods_new
+            || locked_mods_old != locked_mods_new
+            || effective_layout_old != effective_layout_new
+        {
+            Some((
+                depressed_mods_new,
+                latched_mods_new,
+                locked_mods_new,
+                effective_layout_new,
+            ))
+        } else {
+            None
+        }
     }
 
-    pub fn update_modifiers(&mut self, new_modifier_bitflag: u32) {
-        debug!("updating xkb:Keymap");
-        todo!()
+    pub fn update_modifiers(
+        &mut self,
+        depressed_mods: ModMask,
+        latched_mods: ModMask,
+        locked_mods: ModMask,
+        depressed_layout: LayoutIndex,
+        // Wayland doesn't differentiates between depressed, latched and locked
+        // latched_layout: LayoutIndex,
+        // locked_layout: LayoutIndex,
+    ) {
+        self.state.update_mask(
+            depressed_mods,
+            latched_mods,
+            locked_mods,
+            depressed_layout,
+            0,
+            0,
+        );
     }
 
     pub fn format_file_size(&self) -> Result<(KeymapFormat, File, u32), ()> {
@@ -166,12 +214,6 @@ impl Keymap2 {
         let format = KEYMAP_FORMAT_TEXT_V1;
 
         Ok((format, keymap_file, size))
-    }
-
-    pub fn is_modifier(&self, keycode: u16) -> Option<ModifierBitflag> {
-        debug!("is_modifier(&self, keycode: {keycode})");
-        // TODO: Implement this correctly
-        None
     }
 
     pub fn key_to_keycode(&self, key: Key) -> Option<u16> {

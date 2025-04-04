@@ -177,9 +177,9 @@ impl Con {
 
         let time = self.get_time();
         let keycode = keycode - 8; // Adjust by 8 due to the xkb/xwayland requirements
-        let (direction_wayland, direction_xkb) = match direction {
-            Direction::Press => (1, xkb::KeyDirection::Down),
-            Direction::Release => (0, xkb::KeyDirection::Up),
+        let direction_wayland = match direction {
+            Direction::Press => 1,
+            Direction::Release => 0,
             Direction::Click => {
                 return Err(InputError::Simulate(
                     "impossible direction, this should never be possible. This function must never be called with Direction::Click",
@@ -188,12 +188,6 @@ impl Con {
         };
 
         vk.key(time, keycode, direction_wayland);
-        // Update keymap state
-        self.state
-            .seat_keymap
-            .as_mut()
-            .ok_or(InputError::Simulate("no keymap available"))?
-            .update_key(xkb::Keycode::new(keycode), direction_xkb);
 
         self.flush()?;
         Ok(())
@@ -201,7 +195,13 @@ impl Con {
 
     /// Sends a modifier event with the updated bitflag of the modifiers to the
     /// compositor
-    fn send_modifier_event(&mut self, modifiers: ModifierBitflag) -> InputResult<()> {
+    fn send_modifier_event(
+        &mut self,
+        depressed_mods_new: ModifierBitflag,
+        latched_mods_new: ModifierBitflag,
+        locked_mods_new: ModifierBitflag,
+        effective_layout_new: u32,
+    ) -> InputResult<()> {
         // Retrieve virtual keyboard or return an error early if None
         let vk = self
             .state
@@ -213,16 +213,17 @@ impl Con {
         is_alive(vk)?;
 
         // Log the modifier event
-        trace!("vk.modifiers({modifiers}, 0, 0, 0)");
+        trace!(
+            "vk.modifiers({depressed_mods_new}, {latched_mods_new}, {locked_mods_new}, {effective_layout_new})"
+        );
 
         // Send the modifier event
-        vk.modifiers(modifiers, 0, 0, 0);
-        // Update keymap state
-        self.state
-            .seat_keymap
-            .as_mut()
-            .ok_or(InputError::Simulate("no keymap available"))?
-            .update_modifiers(modifiers);
+        vk.modifiers(
+            depressed_mods_new,
+            latched_mods_new,
+            locked_mods_new,
+            effective_layout_new,
+        );
 
         self.flush()?;
 
@@ -613,13 +614,29 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandState {
                     }
                 }
             }
+            wl_keyboard::Event::Modifiers {
+                serial: _,
+                mods_depressed: depressed_mods,
+                mods_latched: latched_mods,
+                mods_locked: locked_mods,
+                group: depressed_layout,
+            } => {
+                if let Some(keymap) = &mut state.seat_keymap {
+                    keymap.update_modifiers(
+                        depressed_mods,
+                        latched_mods,
+                        locked_mods,
+                        depressed_layout,
+                    );
+                    debug!("modifiers updated");
+                }
+            }
             // On Wayland the clients only get notified about pressed keys or modifiers if they have
             // the focus. We cannot assume that is the case, so the received events don't reflect
             // the full picture and we cannot use them to keep track of the state of the keyboard
             wl_keyboard::Event::Enter { .. }
             | wl_keyboard::Event::Leave { .. }
             | wl_keyboard::Event::Key { .. }
-            | wl_keyboard::Event::Modifiers { .. }
             | wl_keyboard::Event::RepeatInfo { .. } => {
                 debug!("WlKeyboard received irrelevant event:\n{event:?}")
             }
@@ -776,30 +793,54 @@ impl Keyboard for Con {
     }
 
     fn raw(&mut self, keycode: u16, direction: Direction) -> InputResult<()> {
-        let keymap = self
-            .state
-            .seat_keymap
-            .as_mut()
-            .ok_or(InputError::Simulate("no keymap available"))?;
-
-        let is_modifier = keymap.is_modifier(keycode);
-
         if direction == Direction::Click || direction == Direction::Press {
-            match is_modifier {
-                Some(modifier_bitflag) => {
-                    trace!("it is a modifier: {modifier_bitflag:?}");
-                    self.send_modifier_event(modifier_bitflag)?
-                }
-                None => self.send_key_event(keycode.into(), Direction::Press)?,
+            // Update keymap state
+            if let Some((
+                depressed_mods_new,
+                latched_mods_new,
+                locked_mods_new,
+                effective_layout_new,
+            )) = self
+                .state
+                .seat_keymap
+                .as_mut()
+                .ok_or(InputError::Simulate("no keymap available"))?
+                .update_key(xkb::Keycode::new(keycode.into()), xkb::KeyDirection::Down)
+            {
+                trace!("it is a modifier");
+                self.send_modifier_event(
+                    depressed_mods_new,
+                    latched_mods_new,
+                    locked_mods_new,
+                    effective_layout_new,
+                )?
+            } else {
+                self.send_key_event(keycode.into(), Direction::Press)?
             }
         }
         if direction == Direction::Click || direction == Direction::Release {
-            match is_modifier {
-                Some(modifier_bitflag) => {
-                    trace!("it is a modifier: {modifier_bitflag:?}");
-                    self.send_modifier_event(modifier_bitflag)?
-                }
-                None => self.send_key_event(keycode.into(), Direction::Release)?,
+            // Update keymap state
+            if let Some((
+                depressed_mods_new,
+                latched_mods_new,
+                locked_mods_new,
+                effective_layout_new,
+            )) = self
+                .state
+                .seat_keymap
+                .as_mut()
+                .ok_or(InputError::Simulate("no keymap available"))?
+                .update_key(xkb::Keycode::new(keycode.into()), xkb::KeyDirection::Up)
+            {
+                trace!("it is a modifier");
+                self.send_modifier_event(
+                    depressed_mods_new,
+                    latched_mods_new,
+                    locked_mods_new,
+                    effective_layout_new,
+                )?
+            } else {
+                self.send_key_event(keycode.into(), Direction::Press)?
             }
         }
         Ok(())

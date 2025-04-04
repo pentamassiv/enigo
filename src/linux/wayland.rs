@@ -25,7 +25,7 @@ use wayland_protocols_misc::{
 use wayland_protocols_wlr::virtual_pointer::v1::client::{
     zwlr_virtual_pointer_manager_v1, zwlr_virtual_pointer_v1,
 };
-use xkbcommon::xkb::{self, FORMAT_TEXT_V1};
+use xkbcommon::xkb;
 
 use super::keymap2::Keymap2;
 use crate::{

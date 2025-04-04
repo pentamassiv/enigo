@@ -38,9 +38,13 @@ pub struct ParsedKeymap {
 }
 
 impl ParsedKeymap {
+    // TODO: Add tests for this function
     /// Try to find an unused keycode and identifier to map the provided keyname
     /// to. Returns the keycode the key is now mapped to
-    // TODO: Add tests for this function
+    ///
+    /// # Errors
+    /// The function fails if no unused keycode can be found or if all
+    /// identifiers from <0000> to <9999> are already used
     pub fn map_key(&mut self, key_name: &str, is_wayland: bool) -> crate::InputResult<u16> {
         // Even if the mimimum is 8, never use 8. This is because 8 is special. 8-8=0
         // and the value 0 stands for "NoSymbol". Some clients disregard the keymap and
@@ -54,7 +58,7 @@ impl ParsedKeymap {
             .find(|raw| {
                 !self
                     .keycodes
-                    .keycodes
+                    .keycode_mappings
                     .iter()
                     .any(|entry| *raw == entry.code)
             })
@@ -69,7 +73,7 @@ impl ParsedKeymap {
             .filter(|potential_identifier_name| {
                 !self
                     .keycodes
-                    .keycodes
+                    .keycode_mappings
                     .iter()
                     .any(|entry| *potential_identifier_name == entry.identifier.identifier)
             })
@@ -86,7 +90,7 @@ impl ParsedKeymap {
         };
 
         // Add free identifier and keycode to keymap
-        self.keycodes.keycodes.push(KeycodeEntry {
+        self.keycodes.keycode_mappings.push(KeycodeEntry {
             identifier: free_identifier.clone(),
             code: free_keycode_u32,
         });
@@ -204,7 +208,7 @@ struct Keycodes {
     name: Name,
     minimum: Keycode,
     maximum: Keycode,
-    keycodes: Vec<KeycodeEntry>,
+    keycode_mappings: Vec<KeycodeEntry>,
     max_len_identifier: usize, // Max length of all identifiers
     indicators: Vec<IndicatorEntry>,
     aliases: Vec<AliasEntry>,
@@ -215,11 +219,11 @@ impl Display for Keycodes {
         writeln!(f, "xkb_keycodes {} {{", self.name)?;
         writeln!(f, "    minimum = {};", self.minimum)?;
         writeln!(f, "    maximum = {};", self.maximum)?;
-        for keycode in &self.keycodes {
-            for _ in keycode.identifier.identifier.len()..self.max_len_identifier {
+        for keycode_mapping in &self.keycode_mappings {
+            for _ in keycode_mapping.identifier.identifier.len()..self.max_len_identifier {
                 write!(f, " ")?;
             }
-            writeln!(f, "    {keycode}")?;
+            writeln!(f, "    {keycode_mapping}")?;
         }
         for indicators in &self.indicators {
             writeln!(f, "    {indicators}")?;
@@ -256,7 +260,7 @@ impl Parse for Keycodes {
                 name,
                 minimum,
                 maximum,
-                keycodes,
+                keycode_mappings: keycodes,
                 max_len_identifier,
                 indicators,
                 aliases,
@@ -659,7 +663,7 @@ mod tests {
             },
             minimum: 8,
             maximum: 255,
-            keycodes: correct_keycodes,
+            keycode_mappings: correct_keycodes,
             max_len_identifier: 4,
             indicators: correct_indicators,
             aliases: correct_aliases,

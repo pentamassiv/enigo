@@ -119,6 +119,7 @@ strum = "0.27"
 strum_macros = "0.27"
 rdev = "0.5"                                     # Test the main_display() function
 mouse_position = "0.1"                           # Test the location() function
+tao = "0.30"
 
 [[example]]
 name = "serde"
@@ -129,6 +130,3 @@ required-features = ["serde"]
 #name = "integration_tao"
 #path = "tests/integration_tao.rs"
 #required-features = ["serde"]
-
-[workspace]
-members = ["helper_app"]

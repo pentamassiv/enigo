@@ -7,13 +7,11 @@ use std::time::Duration;
 
 fn main() {
     env_logger::try_init().ok();
-    thread::sleep(Duration::from_secs(2));
     let mut enigo = Enigo::new(&Settings::default()).unwrap();
 
+    thread::sleep(Duration::from_secs(6));
     // write text
-    enigo
-        .text("Hello World! here is a lot of text  ❤️")
-        .unwrap();
+    enigo.text("Hello World! here is a lot of text").unwrap();
 
     // select all
     enigo.key(Key::Control, Press).unwrap();

@@ -1,21 +1,12 @@
-use std::io::{Seek as _, SeekFrom, Write as _};
-
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, agent::Token};
 use tao::{
     dpi::PhysicalPosition,
     event::{DeviceEvent, ElementState, Event, MouseButton, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     keyboard::ModifiersState,
-    platform::run_return::EventLoopExtRunReturn as _,
+    platform::{run_return::EventLoopExtRunReturn as _, unix::EventLoopBuilderExtUnix as _},
     window::WindowBuilder,
 };
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Todo {
-    Quit,
-    Noop,
-    Success,
-}
 
 /// This application only displays a white window that is maximized and has no
 /// header bar. It's only purpose is to register input and write it to the file
@@ -36,7 +27,7 @@ pub struct EnigoApp {
 
 impl EnigoApp {
     pub fn new(settings: &enigo::Settings) -> Self {
-        let event_loop = EventLoop::new();
+        let event_loop = EventLoopBuilder::new().with_any_thread(true).build();
         let window = WindowBuilder::new()
             .with_decorations(false) // Disable the header bar
             .with_title("Test enigo")
@@ -59,62 +50,97 @@ impl EnigoApp {
         }
     }
 
-    fn process(&mut self, token: Token) {
-        let todo = Todo::Noop;
-
-        while todo != Todo::Success {
-            self.event_loop.run_return(|event, _, control_flow| {
-                // *control_flow = ControlFlow::Exit; // ensure we exit after this dispatch
-
-                let todo = match event {
-                    Event::WindowEvent { event, .. } => try_from(event, self.modifier_state),
-                    Event::NewEvents(start_cause) => todo!(),
-                    Event::DeviceEvent {
-                        device_id, event, ..
-                    } => todo!(),
-                    Event::UserEvent(_) => todo!(),
-                    Event::Suspended => todo!(),
-                    Event::Resumed => todo!(),
-                    Event::MainEventsCleared => todo!(),
-                    Event::RedrawRequested(window_id) => todo!(),
-                    Event::RedrawEventsCleared => todo!(),
-                    Event::LoopDestroyed => todo!(),
-                    Event::Opened { urls } => todo!(),
-                    Event::Reopen {
-                        has_visible_windows,
-                        ..
-                    } => todo!(),
-                    _ => todo!(),
-                };
-            });
-        }
+    fn pump_till(&mut self, expected_token: Token) {
+        self.event_loop.run_return(|event, _, _| {
+            println!();
+            println!("Processing event: {event:?}");
+            let token = match event {
+                Event::WindowEvent { event, .. } => try_from(event, self.modifier_state),
+                Event::DeviceEvent {
+                    device_id, event, ..
+                } => todo!(),
+                Event::NewEvents(_)
+                | Event::UserEvent(_)
+                | Event::Suspended
+                | Event::Resumed
+                | Event::MainEventsCleared
+                | Event::RedrawRequested(_)
+                | Event::RedrawEventsCleared
+                | Event::LoopDestroyed
+                | Event::Opened { .. }
+                | Event::Reopen { .. } => return,
+                _ => todo!(),
+            };
+            if let Some(token) = token {
+                assert_eq!(expected_token, token);
+            }
+        });
     }
 }
 
 impl enigo::Keyboard for EnigoApp {
     // This does not work for all text or the library does not work properly
-    fn fast_text(&mut self, text: &str) -> enigo::InputResult<Option<()>> {}
-    fn key(&mut self, key: Key, direction: Direction) -> enigo::InputResult<()> {}
-    fn raw(&mut self, keycode: u16, direction: enigo::Direction) -> enigo::InputResult<()> {}
+    fn fast_text(&mut self, text: &str) -> enigo::InputResult<Option<()>> {
+        let res = self.enigo.fast_text(text);
+        if res.is_ok() {
+            self.pump_till(Token::Text(text.to_string()));
+        }
+        res
+    }
+    fn key(&mut self, key: Key, direction: Direction) -> enigo::InputResult<()> {
+        let res = self.enigo.key(key, direction);
+        if res.is_ok() {
+            self.pump_till(Token::Key(key, direction));
+        }
+        res
+    }
+    fn raw(&mut self, keycode: u16, direction: enigo::Direction) -> enigo::InputResult<()> {
+        let res = self.enigo.raw(keycode, direction);
+        if res.is_ok() {
+            self.pump_till(Token::Raw(keycode, direction));
+        }
+        res
+    }
 }
 
 impl enigo::Mouse for EnigoApp {
-    fn button(&mut self, button: enigo::Button, direction: Direction) -> enigo::InputResult<()> {}
-    fn move_mouse(&mut self, x: i32, y: i32, coordinate: Coordinate) -> enigo::InputResult<()> {}
-    fn scroll(&mut self, length: i32, axis: Axis) -> enigo::InputResult<()> {}
-    fn main_display(&self) -> enigo::InputResult<(i32, i32)> {}
-    fn location(&self) -> enigo::InputResult<(i32, i32)> {}
+    fn button(&mut self, button: enigo::Button, direction: Direction) -> enigo::InputResult<()> {
+        let res = self.enigo.button(button, direction);
+        if res.is_ok() {
+            self.pump_till(Token::Button(button, direction));
+        }
+        res
+    }
+    fn move_mouse(&mut self, x: i32, y: i32, coordinate: Coordinate) -> enigo::InputResult<()> {
+        let res = self.enigo.move_mouse(x, y, coordinate);
+        if res.is_ok() {
+            self.pump_till(Token::MoveMouse(x, y, coordinate));
+        }
+        res
+    }
+    fn scroll(&mut self, length: i32, axis: Axis) -> enigo::InputResult<()> {
+        let res = self.enigo.scroll(length, axis);
+        if res.is_ok() {
+            self.pump_till(Token::Scroll(length, axis));
+        }
+        res
+    }
+    fn main_display(&self) -> enigo::InputResult<(i32, i32)> {
+        self.enigo.main_display()
+    }
+    fn location(&self) -> enigo::InputResult<(i32, i32)> {
+        self.enigo.location()
+    }
 }
 
-fn try_from(event: WindowEvent, before_modifier_state: ModifiersState) -> Todo {
+fn try_from(event: WindowEvent, before_modifier_state: ModifiersState) -> Option<Token> {
     match event {
         WindowEvent::CloseRequested => {
-            println!("close requested");
-            Todo::Quit
+            panic!("close requested. Impossible in the test");
         }
         WindowEvent::CursorMoved { position, .. } => {
             println!("MoveMouse({}, {}, Abs)", position.x, position.y);
-            Todo::TestResult(Token::MoveMouse(
+            Some(Token::MoveMouse(
                 position.x as i32,
                 position.y as i32,
                 Coordinate::Abs,
@@ -124,7 +150,7 @@ fn try_from(event: WindowEvent, before_modifier_state: ModifiersState) -> Todo {
             let direction = from_state(state);
             let button = from_mouse_button(button);
             println!("Button({button:?}, {direction:?})");
-            Todo::TestResult(Token::Button(button, direction))
+            Some(Token::Button(button, direction))
         }
         WindowEvent::MouseWheel { delta, .. } => {
             let (x, y) = match delta {
@@ -137,7 +163,7 @@ fn try_from(event: WindowEvent, before_modifier_state: ModifiersState) -> Todo {
             let axis;
             if x.abs() <= 0.1 && y.abs() <= 0.1 {
                 // There was no scroll, so do nothing
-                return Todo::Noop;
+                return None;
             } else if x.abs() <= 0.1 && y.abs() > 0.1 {
                 // Vertical scroll
                 length = -y;
@@ -154,13 +180,13 @@ fn try_from(event: WindowEvent, before_modifier_state: ModifiersState) -> Todo {
             match delta {
                 tao::event::MouseScrollDelta::LineDelta(_, _) => {
                     println!("Scroll({length}, {axis:?})");
-                    Todo::TestResult(Token::Scroll(length as i32, axis))
+                    Some(Token::Scroll(length as i32, axis))
                 }
                 tao::event::MouseScrollDelta::PixelDelta(_) => {
                     #[cfg(all(feature = "platform_specific", target_os = "macos"))]
                     {
                         println!("Scroll({length}, {axis:?})");
-                        Todo::TestResult(Token::SmoothScroll(length as i32, axis))
+                        Some(Token::SmoothScroll(length as i32, axis))
                     }
                     #[cfg(not(all(feature = "platform_specific", target_os = "macos")))]
                     {
@@ -181,11 +207,11 @@ fn try_from(event: WindowEvent, before_modifier_state: ModifiersState) -> Todo {
             };
 
             println!("Key({key:?}, {direction:?})");
-            Todo::TestResult(Token::Key(key, direction))
+            Some(Token::Key(key, direction))
         }
         WindowEvent::ReceivedImeText(string) => {
             println!("Text({string})");
-            Todo::TestResult(Token::Text(string))
+            Some(Token::Text(string))
         }
         WindowEvent::KeyboardInput {
             device_id: _,
@@ -194,9 +220,9 @@ fn try_from(event: WindowEvent, before_modifier_state: ModifiersState) -> Todo {
             ..
         } => todo!(),
         // Not (yet) relevant events
-        WindowEvent::Touch(_) => Todo::Noop,
-        WindowEvent::AxisMotion { .. } => Todo::Noop,
-        WindowEvent::TouchpadPressure { .. } => Todo::Noop,
+        WindowEvent::Touch(_) => None,
+        WindowEvent::AxisMotion { .. } => None,
+        WindowEvent::TouchpadPressure { .. } => None,
         // Irrelevant events
         WindowEvent::Resized(_)
         | WindowEvent::Moved(_)
@@ -209,7 +235,7 @@ fn try_from(event: WindowEvent, before_modifier_state: ModifiersState) -> Todo {
         | WindowEvent::CursorLeft { .. }
         | WindowEvent::ScaleFactorChanged { .. }
         | WindowEvent::ThemeChanged(_)
-        | WindowEvent::DecorationsClick => Todo::Noop,
+        | WindowEvent::DecorationsClick => None,
         _ => panic!("Unknown WindowEvent"),
     }
 }

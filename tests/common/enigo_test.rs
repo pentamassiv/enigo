@@ -2,23 +2,19 @@ use std::net::{TcpListener, TcpStream};
 
 use tungstenite::accept;
 
-use enigo::{
-    Axis, Coordinate,
-    Direction::{self, Click, Press, Release},
-    Enigo, Key, Keyboard, Mouse, Settings,
-};
+use enigo::{Axis, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings, agent::Token};
 
 use super::browser_events::BrowserEvent;
 
-const TIMEOUT: u64 = 5; // Number of minutes the test is allowed to run before timing out
+// Number of minutes the test is allowed to run before timing out
 // This is needed, because some of the websocket functions are blocking and
 // would run indefinitely without a timeout if they don't receive a message
-const INPUT_DELAY: u64 = 40; // Number of milliseconds to wait for the input to have an effect
-const SCROLL_STEP: (i32, i32) = (20, 114); // (horizontal, vertical)
+const TIMEOUT: u64 = 5;
 
 pub struct EnigoTest {
     enigo: Enigo,
     websocket: tungstenite::WebSocket<TcpStream>,
+    message_id: u32,
 }
 
 impl EnigoTest {
@@ -30,7 +26,11 @@ impl EnigoTest {
         let websocket = Self::websocket();
 
         std::thread::sleep(std::time::Duration::from_secs(10)); // Give Firefox some time to launch
-        Self { enigo, websocket }
+        Self {
+            enigo,
+            websocket,
+            message_id: 0,
+        }
     }
 
     fn websocket() -> tungstenite::WebSocket<TcpStream> {
@@ -68,8 +68,8 @@ impl EnigoTest {
         browser_event
     }
 
+    // Spawn a thread to handle the timeout
     fn start_timeout_thread() {
-        // Spawn a thread to handle the timeout
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(TIMEOUT * 60));
             println!("Test suite exceeded the maximum allowed time of {TIMEOUT} minutes.");
@@ -79,170 +79,138 @@ impl EnigoTest {
 }
 
 impl Keyboard for EnigoTest {
-    // This does not work for all text or the library does not work properly
     fn fast_text(&mut self, text: &str) -> enigo::InputResult<Option<()>> {
-        self.send_message("ClearText");
-        println!("Attempt to clear the text");
+        let token = Token::Text(text.to_string());
+        let msg = BrowserEvent::Syn(self.message_id, token);
+        let msg_string = ron::to_string(&msg).expect("unable to serialize the message");
+        self.send_message(&msg_string);
+        self.message_id += 1;
+        self.enigo.text(text).unwrap();
         assert_eq!(
-            BrowserEvent::ReadyForText,
+            msg,
             self.read_message(),
-            "Failed to get ready for the text"
+            "Failed to simulate the text() function"
         );
-        let res = self.enigo.text(text);
-        std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
-        self.send_message("GetText");
 
-        let ev = self.read_message();
-        assert_eq!(ev, text);
-
-        res.map(Some) // TODO: Check if this is always correct
+        Ok(Some(()))
     }
 
     fn key(&mut self, key: Key, direction: Direction) -> enigo::InputResult<()> {
-        let res = self.enigo.key(key, direction);
-        if direction == Press || direction == Click {
-            let ev = self.read_message();
-            assert_eq!(ev, (key, Press))
-        }
-        if direction == Release || direction == Click {
-            std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
-            let ev = self.read_message();
-            assert_eq!(ev, (key, Release));
-        }
-        println!("enigo.key() was a success");
-        res
+        let token = Token::Key(key, direction);
+        let msg = BrowserEvent::Syn(self.message_id, token);
+        let msg_string = ron::to_string(&msg).expect("unable to serialize the message");
+        self.send_message(&msg_string);
+        self.message_id += 1;
+        self.enigo.key(key, direction).unwrap();
+        assert_eq!(
+            msg,
+            self.read_message(),
+            "Failed to simulate the key() function"
+        );
+
+        Ok(())
     }
 
     fn raw(&mut self, keycode: u16, direction: enigo::Direction) -> enigo::InputResult<()> {
-        todo!()
+        let token = Token::Raw(keycode, direction);
+        let msg = BrowserEvent::Syn(self.message_id, token);
+        let msg_string = ron::to_string(&msg).expect("unable to serialize the message");
+        self.send_message(&msg_string);
+        self.message_id += 1;
+        self.enigo.raw(keycode, direction).unwrap();
+        assert_eq!(
+            msg,
+            self.read_message(),
+            "Failed to simulate the raw() function"
+        );
+
+        Ok(())
     }
 }
 
 impl Mouse for EnigoTest {
     fn button(&mut self, button: enigo::Button, direction: Direction) -> enigo::InputResult<()> {
-        let res = self.enigo.button(button, direction);
-        if direction == Press || direction == Click {
-            let ev = self.read_message();
-            if let BrowserEvent::MouseDown(name) = ev {
-                println!("received pressed button: {name}");
-                assert_eq!(button as u32, name);
-            } else {
-                panic!("BrowserEvent was not a MouseDown: {ev:?}");
-            }
-        }
-        if direction == Release || direction == Click {
-            std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
-            let ev = self.read_message();
-            if let BrowserEvent::MouseUp(name) = ev {
-                println!("received released button: {name}");
-                assert_eq!(button as u32, name);
-            } else {
-                panic!("BrowserEvent was not a MouseUp: {ev:?}");
-            }
-        }
-        println!("enigo.button() was a success");
-        res
-    }
+        let token = Token::Button(button, direction);
+        let msg = BrowserEvent::Syn(self.message_id, token);
+        let msg_string = ron::to_string(&msg).expect("unable to serialize the message");
+        self.send_message(&msg_string);
+        self.message_id += 1;
+        self.enigo.button(button, direction).unwrap();
+        assert_eq!(
+            msg,
+            self.read_message(),
+            "Failed to simulate the button() function"
+        );
 
-    fn move_mouse(&mut self, x: i32, y: i32, coordinate: Coordinate) -> enigo::InputResult<()> {
-        let res = self.enigo.move_mouse(x, y, coordinate);
-        println!("Executed enigo.move_mouse");
-        std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
-
-        let ev = self.read_message();
-        println!("Done waiting");
-
-        let mouse_position = if let BrowserEvent::MouseMove(pos_rel, pos_abs) = ev {
-            match coordinate {
-                Coordinate::Rel => pos_rel,
-                Coordinate::Abs => pos_abs,
-            }
-        } else {
-            panic!("BrowserEvent was not a MouseMove: {ev:?}");
-        };
-
-        assert_eq!(x, mouse_position.0);
-        assert_eq!(y, mouse_position.1);
-        println!("enigo.move_mouse() was a success");
-        res
-    }
-
-    fn scroll(&mut self, length: i32, axis: Axis) -> enigo::InputResult<()> {
-        let mut length = length;
-        let res = self.enigo.scroll(length, axis);
-        println!("Executed Enigo");
-        std::thread::sleep(std::time::Duration::from_millis(INPUT_DELAY)); // Wait for input to have an effect
-
-        // On some platforms it is not possible to scroll multiple lines so we
-        // repeatedly scroll. In order for this test to work on all platforms, both
-        // cases are not differentiated
-        let mut mouse_scroll;
-        let mut step;
-        while length > 0 {
-            let ev = self.read_message();
-            println!("Done waiting");
-
-            (mouse_scroll, step) =
-                if let BrowserEvent::MouseScroll(horizontal_scroll, vertical_scroll) = ev {
-                    match axis {
-                        Axis::Horizontal => (horizontal_scroll, SCROLL_STEP.0),
-                        Axis::Vertical => (vertical_scroll, SCROLL_STEP.1),
-                    }
-                } else {
-                    panic!("BrowserEvent was not a MouseScroll: {ev:?}");
-                };
-            length -= mouse_scroll / step;
-        }
-
-        println!("enigo.scroll() was a success");
-        res
-    }
-
-    fn main_display(&self) -> enigo::InputResult<(i32, i32)> {
-        let res = self.enigo.main_display();
-        match res {
-            Ok((x, y)) => {
-                let (rdev_x, rdev_y) = rdev_main_display();
-                println!("enigo display: {x},{y}");
-                println!("rdev_display: {rdev_x},{rdev_y}");
-                assert_eq!(x, rdev_x);
-                assert_eq!(y, rdev_y);
-            }
-            Err(_) => todo!(),
-        }
-        res
+        Ok(())
     }
 
     // Edge cases don't work (mouse is at the left most border and can't move one to
     // the left)
+    fn move_mouse(&mut self, x: i32, y: i32, coordinate: Coordinate) -> enigo::InputResult<()> {
+        let token = Token::MoveMouse(x, y, coordinate);
+        let msg = BrowserEvent::Syn(self.message_id, token);
+        let msg_string = ron::to_string(&msg).expect("unable to serialize the message");
+        self.send_message(&msg_string);
+        self.message_id += 1;
+        self.enigo.move_mouse(x, y, coordinate).unwrap();
+        assert_eq!(
+            msg,
+            self.read_message(),
+            "Failed to simulate the move_mouse() function"
+        );
+
+        Ok(())
+    }
+
+    fn scroll(&mut self, length: i32, axis: Axis) -> enigo::InputResult<()> {
+        let token = Token::Scroll(length, axis);
+        let msg = BrowserEvent::Syn(self.message_id, token);
+        let msg_string = ron::to_string(&msg).expect("unable to serialize the message");
+        self.send_message(&msg_string);
+        self.message_id += 1;
+        self.enigo.scroll(length, axis).unwrap();
+        assert_eq!(
+            msg,
+            self.read_message(),
+            "Failed to simulate the scroll() function"
+        );
+
+        Ok(())
+    }
+
+    fn main_display(&self) -> enigo::InputResult<(i32, i32)> {
+        let enigo_res = self.enigo.main_display().unwrap();
+        let rdev_res = rdev_main_display();
+        assert_eq!(
+            enigo_res, rdev_res,
+            "enigo_res: {enigo_res:?}; rdev_res: {rdev_res:?}"
+        );
+        Ok(enigo_res)
+    }
+
     fn location(&self) -> enigo::InputResult<(i32, i32)> {
-        let res = self.enigo.location();
-        match res {
-            Ok((x, y)) => {
-                let (mouse_x, mouse_y) = mouse_position();
-                println!("enigo_position: {x},{y}");
-                println!("mouse_position: {mouse_x},{mouse_y}");
-                assert_eq!(x, mouse_x);
-                assert_eq!(y, mouse_y);
-            }
-            Err(_) => todo!(),
-        }
-        res
+        let enigo_res = self.enigo.location().unwrap();
+        let mouse_position_res = mouse_position();
+        assert_eq!(
+            enigo_res, mouse_position_res,
+            "enigo_res: {enigo_res:?}; rdev_res: {mouse_position_res:?}"
+        );
+        Ok(enigo_res)
     }
 }
 
 fn rdev_main_display() -> (i32, i32) {
-    use rdev::display_size;
-    let (x, y) = display_size().unwrap();
-    (x.try_into().unwrap(), y.try_into().unwrap())
+    rdev::display_size()
+        .map(|(x, y)| (x as i32, y as i32))
+        .unwrap()
 }
 
 fn mouse_position() -> (i32, i32) {
     use mouse_position::mouse_position::Mouse;
 
-    if let Mouse::Position { x, y } = Mouse::get_mouse_position() {
-        (x, y)
-    } else {
-        panic!("the crate mouse_location was unable to get the position of the mouse");
+    match Mouse::get_mouse_position() {
+        Mouse::Position { x, y } => (x, y),
+        _ => panic!("Unable to get the mouse position"),
     }
 }

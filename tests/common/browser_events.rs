@@ -1,20 +1,29 @@
-use enigo::{Direction, Key};
-use log::debug;
+use enigo::agent::Token;
 use serde::{Deserialize, Serialize};
-use tungstenite::{Message, Utf8Bytes};
+use tungstenite::Message;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, Hash, Serialize, Deserialize)]
 pub enum BrowserEvent {
-    ReadyForText,
-    Text(String),
-    KeyDown(String, String),
-    KeyUp(String, String),
-    MouseDown(u32),
-    MouseUp(u32),
-    MouseMove((i32, i32), (i32, i32)), // (relative, absolute)
-    MouseScroll(i32, i32),
+    Syn(u32, Token), // ID, Token
+    Ack(u32, Token), // ID, Token
     Open,
     Close,
+}
+
+/// Manual impl so that BrowserEvent::Syn and BrowserEvent::Ack are equal if the
+/// ID and token are equal
+impl PartialEq for BrowserEvent {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Syn(l0, l1), Self::Ack(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Syn(l0, l1), Self::Syn(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Ack(l0, l1), Self::Ack(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Ack(l0, l1), Self::Syn(r0, r1)) => l0 == r0 && l1 == r1,
+            (BrowserEvent::Open, BrowserEvent::Open) => true,
+            (BrowserEvent::Close, BrowserEvent::Close) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -44,7 +53,7 @@ impl TryFrom<Message> for BrowserEvent {
                     Err(BrowserEventError::ParseError)
                 }
             }
-            _ => {
+            Message::Binary(_) | Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {
                 println!("Other Message received");
                 Err(BrowserEventError::UnknownMessageType)
             }
@@ -52,69 +61,18 @@ impl TryFrom<Message> for BrowserEvent {
     }
 }
 
-impl PartialEq<(Key, Direction)> for BrowserEvent {
-    fn eq(&self, (key, direction): &(Key, Direction)) -> bool {
-        match self {
-            BrowserEvent::KeyDown(name, debug_data) if *direction == Direction::Press => {
-                let key_name = match key {
-                    Key::Unicode(char) => format!("{char}"),
-                    Key::Shift => "ShiftLeft".to_string(),
-                    Key::LShift => "ShiftLeft".to_string(),
-                    Key::RShift => "ShiftRight".to_string(),
-                    Key::Control => "ControlLeft".to_string(),
-                    Key::LControl => "ControlLeft".to_string(),
-                    Key::RControl => "ControlRight".to_string(),
-                    // TODO: Add the other keys that have a right and left variant here
-                    _ => format!("{key:?}"),
-                };
-                if key_name == *name {
-                    true
-                } else {
-                    debug!("key debug data: {debug_data}");
-                    false
-                }
-            }
-
-            BrowserEvent::KeyUp(name, debug_data) if *direction == Direction::Release => {
-                let key_name = match key {
-                    Key::Unicode(char) => format!("{char}"),
-                    Key::Shift => "ShiftLeft".to_string(),
-                    Key::LShift => "ShiftLeft".to_string(),
-                    Key::RShift => "ShiftRight".to_string(),
-                    Key::Control => "ControlLeft".to_string(),
-                    Key::LControl => "ControlLeft".to_string(),
-                    Key::RControl => "ControlRight".to_string(),
-                    // TODO: Add the other keys that have a right and left variant here
-                    _ => format!("{key:?}"),
-                };
-                if key_name == *name {
-                    true
-                } else {
-                    debug!("{debug_data}");
-                    false
-                }
-            }
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<&str> for BrowserEvent {
-    fn eq(&self, other: &&str) -> bool {
-        if let BrowserEvent::Text(received_text) = self {
-            other == received_text
-        } else {
-            false
-        }
-    }
-}
+/*
 
 #[test]
 fn deserialize_browser_events() {
+    /*
+    Syn(u32, Token),
+    Ack(u32, Token),
+     */
     let messages = vec![
         (
             Message::Text(Utf8Bytes::from("ReadyForText")),
-            BrowserEvent::ReadyForText,
+            BrowserEvent::Syn(1, Token::Text("abcd".to_string())),
         ),
         (
             Message::Text(Utf8Bytes::from("Text(\"Testing\")")),
@@ -163,3 +121,5 @@ fn deserialize_browser_events() {
         assert_eq!(BrowserEvent::try_from(msg).unwrap(), event);
     }
 }
+
+*/

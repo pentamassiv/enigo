@@ -1,4 +1,6 @@
 use enigo::{
+    Axis::{Horizontal, Vertical},
+    Button,
     Coordinate::{Abs, Rel},
     Direction::{Click, Press, Release},
     Key, Keyboard, Mouse as _, Settings,
@@ -39,7 +41,9 @@ fn integration_browser_events() {
     }
 
     log::debug!("Test mouse");
-    // enigo.button(Button::Left, Click).unwrap();
+    enigo.button(Button::Left, Click).unwrap();
+    enigo.button(Button::Middle, Click).unwrap();
+    enigo.button(Button::Right, Click).unwrap();
     enigo.move_mouse(100, 100, Abs).unwrap();
     enigo.move_mouse(200, 200, Abs).unwrap();
     let (x, y) = enigo.location().unwrap();
@@ -49,9 +53,8 @@ fn integration_browser_events() {
     enigo.move_mouse(20, -20, Rel).unwrap();
     enigo.move_mouse(-20, -20, Rel).unwrap();
 
-    // Stalls on Windows, macOS and Linux with x11rb
-    // enigo.scroll(1, Vertical).unwrap();
-    // enigo.scroll(1, Horizontal).unwrap();
+    enigo.scroll(1, Vertical).unwrap();
+    enigo.scroll(1, Horizontal).unwrap();
 
     enigo.main_display().unwrap();
     enigo.location().unwrap();

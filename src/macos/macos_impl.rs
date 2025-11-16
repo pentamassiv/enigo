@@ -77,7 +77,6 @@ unsafe extern "C" {
 /// The main struct for handling the event emitting
 pub struct Enigo {
     event_source: CGEventSource,
-    display: CGDisplay,
     held: (Vec<Key>, Vec<CGKeyCode>), // Currently held keys
     event_source_user_data: i64,
     release_keys_when_dropped: bool,
@@ -253,15 +252,12 @@ impl Mouse for Enigo {
 
     fn main_display(&self) -> InputResult<(i32, i32)> {
         debug!("\x1b[93mmain_display()\x1b[0m");
-        Ok((
-            self.display.pixels_wide() as i32,
-            self.display.pixels_high() as i32,
-        ))
+        let display = CGDisplay::main();
+        Ok((display.pixels_wide() as i32, display.pixels_high() as i32))
     }
 
     fn location(&self) -> InputResult<(i32, i32)> {
         debug!("\x1b[93mlocation()\x1b[0m");
-
         let location = self.mouse_location()?;
         let (x, y_inv) = (location.x as i32, location.y as i32);
         Ok((x, y_inv))
@@ -558,7 +554,6 @@ impl Enigo {
 
         Ok(Enigo {
             event_source,
-            display: CGDisplay::main(),
             held,
             release_keys_when_dropped: *release_keys_when_dropped,
             event_flags,

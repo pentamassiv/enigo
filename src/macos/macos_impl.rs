@@ -609,23 +609,18 @@ impl Enigo {
                 8,
                 (code << 16) | (0xa << 8),
                 -1
-            );
+            )
+            .ok_or(InputError::Simulate("failed creating event to press special key"))?;
 
-            if let Some(event) = event {
-                let cg_event = unsafe { Self::ns_event_cg_event(&event).to_owned() };
-                cg_event.set_integer_value_field(
-                    EventField::EVENT_SOURCE_USER_DATA,
-                    self.event_source_user_data,
-                );
-                cg_event.set_flags(self.event_flags);
-                self.update_event_location(&cg_event);
-                cg_event.post(CGEventTapLocation::HID);
-                self.update_wait_time();
-            } else {
-                return Err(InputError::Simulate(
-                    "failed creating event to press special key",
-                ));
-            }
+            let event = unsafe { Self::ns_event_cg_event(&event).to_owned() };
+            event.set_integer_value_field(
+                EventField::EVENT_SOURCE_USER_DATA,
+                self.event_source_user_data,
+            );
+            event.set_flags(self.event_flags);
+            self.update_event_location(&event);
+            event.post(CGEventTapLocation::HID);
+            self.update_wait_time();
         }
 
         if direction == Direction::Release || direction == Direction::Click {
@@ -639,23 +634,17 @@ impl Enigo {
                 8,
                 (code << 16) | (0xb << 8),
                 -1
-            );
+            ).ok_or(InputError::Simulate("failed creating event to release special key"))?;
 
-            if let Some(event) = event {
-                let cg_event = unsafe { Self::ns_event_cg_event(&event).to_owned() };
-                cg_event.set_integer_value_field(
-                    EventField::EVENT_SOURCE_USER_DATA,
-                    self.event_source_user_data,
-                );
-                cg_event.set_flags(self.event_flags);
-                self.update_event_location(&cg_event);
-                cg_event.post(CGEventTapLocation::HID);
-                self.update_wait_time();
-            } else {
-                return Err(InputError::Simulate(
-                    "failed creating event to release special key",
-                ));
-            }
+            let event = unsafe { Self::ns_event_cg_event(&event).to_owned() };
+            event.set_integer_value_field(
+                EventField::EVENT_SOURCE_USER_DATA,
+                self.event_source_user_data,
+            );
+            event.set_flags(self.event_flags);
+            self.update_event_location(&event);
+            event.post(CGEventTapLocation::HID);
+            self.update_wait_time();
         }
 
         Ok(())

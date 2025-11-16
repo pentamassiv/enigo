@@ -120,13 +120,11 @@ impl Mouse for Enigo {
                 Button::ScrollLeft => return self.scroll(-1, Axis::Horizontal),
                 Button::ScrollRight => return self.scroll(1, Axis::Horizontal),
             };
-            let Ok(event) =
+            let event =
                 CGEvent::new_mouse_event(self.event_source.clone(), event_type, dest, button)
-            else {
-                return Err(InputError::Simulate(
-                    "failed creating event to enter mouse button",
-                ));
-            };
+                    .map_err(|()| {
+                        InputError::Simulate("failed creating event to enter mouse button")
+                    })?;
 
             if let Some(button_number) = button_number {
                 event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, button_number);
@@ -160,13 +158,11 @@ impl Mouse for Enigo {
                     return Ok(());
                 }
             };
-            let Ok(event) =
+            let event =
                 CGEvent::new_mouse_event(self.event_source.clone(), event_type, dest, button)
-            else {
-                return Err(InputError::Simulate(
-                    "failed creating event to enter mouse button",
-                ));
-            };
+                    .map_err(|()| {
+                        InputError::Simulate("failed creating event to enter mouse button")
+                    })?;
 
             if let Some(button_number) = button_number {
                 event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, button_number);
@@ -208,13 +204,9 @@ impl Mouse for Enigo {
         };
 
         let dest = CGPoint::new(absolute.0 as f64, absolute.1 as f64);
-        let Ok(event) =
+        let event =
             CGEvent::new_mouse_event(self.event_source.clone(), event_type, dest, button)
-        else {
-            return Err(InputError::Simulate(
-                "failed creating event to move the mouse",
-            ));
-        };
+                .map_err(|()| InputError::Simulate("failed creating event to move the mouse"))?;
 
         // Add information by how much the mouse was moved
         event.set_integer_value_field(
@@ -291,11 +283,9 @@ impl Keyboard for Enigo {
         // The CGEventKeyboardSetUnicodeString function (used inside of
         // event.set_string(chunk)) truncates strings down to 20 characters
         for mut chunk in chunks(text, 20) {
-            let Ok(event) = CGEvent::new_keyboard_event(self.event_source.clone(), 0, true) else {
-                return Err(InputError::Simulate(
-                    "failed creating event to enter the text",
-                ));
-            };
+            let event = CGEvent::new_keyboard_event(self.event_source.clone(), 0, true)
+                .map_err(|()| InputError::Simulate("failed creating event to enter the text"))?;
+
             // WORKAROUND: This is a fix for issue https://github.com/enigo-rs/enigo/issues/260
             // This is needed to get rid of all leading line feed, tab and carriage return
             // characters. event.set_string(chunk)) silently fails if the chunk
@@ -419,11 +409,10 @@ impl Keyboard for Enigo {
                 self.special_keys(23, direction)?;
             }
             _ => {
-                let Ok(keycode) = CGKeyCode::try_from(key) else {
-                    return Err(InputError::InvalidInput(
-                        "virtual keycodes on macOS have to fit into u16",
-                    ));
-                };
+                let keycode = CGKeyCode::try_from(key).map_err(|()| {
+                    InputError::InvalidInput("virtual keycodes on macOS have to fit into u16")
+                })?;
+
                 self.raw(keycode, direction)?;
             }
         }
@@ -449,12 +438,8 @@ impl Keyboard for Enigo {
         debug!("\x1b[93mraw(keycode: {keycode:?}, direction: {direction:?})\x1b[0m");
 
         if direction == Direction::Click || direction == Direction::Press {
-            let Ok(event) = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, true)
-            else {
-                return Err(InputError::Simulate(
-                    "failed creating event to press the key",
-                ));
-            };
+            let event = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, true)
+                .map_err(|()| InputError::Simulate("failed creating event to press the key"))?;
 
             event.set_integer_value_field(
                 EventField::EVENT_SOURCE_USER_DATA,
@@ -468,12 +453,8 @@ impl Keyboard for Enigo {
         }
 
         if direction == Direction::Click || direction == Direction::Release {
-            let Ok(event) = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, false)
-            else {
-                return Err(InputError::Simulate(
-                    "failed creating event to release the key",
-                ));
-            };
+            let event = CGEvent::new_keyboard_event(self.event_source.clone(), keycode, false)
+                .map_err(|()| InputError::Simulate("failed creating event to release the key"))?;
 
             event.set_integer_value_field(
                 EventField::EVENT_SOURCE_USER_DATA,
@@ -540,9 +521,8 @@ impl Enigo {
         } else {
             CGEventSourceStateID::CombinedSessionState
         };
-        let Ok(event_source) = CGEventSource::new(event_source_state) else {
-            return Err(NewConError::EstablishCon("failed creating event source"));
-        };
+        let event_source = CGEventSource::new(event_source_state)
+            .map_err(|()| NewConError::EstablishCon("failed creating event source"))?;
 
         debug!("\x1b[93mconnection established on macOS\x1b[0m");
 
@@ -891,16 +871,15 @@ impl Enigo {
             Axis::Vertical => (1, -length, 0),
         };
 
-        let Ok(event) = CGEvent::new_scroll_event(
+        let event = CGEvent::new_scroll_event(
             self.event_source.clone(),
             scroll_event_unit,
             ax,
             len_x,
             len_y,
             0,
-        ) else {
-            return Err(InputError::Simulate("failed creating event to scroll"));
-        };
+        )
+        .map_err(|()| InputError::Simulate("failed creating event to scroll"))?;
 
         event.set_integer_value_field(
             EventField::EVENT_SOURCE_USER_DATA,
@@ -1030,12 +1009,7 @@ impl TryFrom<Key> for core_graphics::event::CGKeyCode {
             Key::VolumeUp => KeyCode::VOLUME_UP,
             Key::VolumeMute => KeyCode::MUTE,
             Key::Unicode(c) => get_layoutdependent_keycode(&c.to_string()),
-            Key::Other(v) => {
-                let Ok(v) = u16::try_from(v) else {
-                    return Err(());
-                };
-                v
-            }
+            Key::Other(v) => u16::try_from(v).map_err(|_| ())?,
             Key::Super | Key::Command | Key::Windows | Key::Meta => KeyCode::COMMAND,
             Key::BrightnessDown
             | Key::BrightnessUp

@@ -197,9 +197,22 @@ impl Mouse for Enigo {
         };
 
         let dest = CGPoint::new(absolute.0 as f64, absolute.1 as f64);
-        let event =
-            CGEvent::new_mouse_event(self.event_source.clone(), event_type, dest, button)
-                .map_err(|()| InputError::Simulate("failed creating event to move the mouse"))?;
+        // HACK: needed until https://github.com/servo/core-foundation-rs/issues/745 is fixed
+        // Should be:  CGEvent::new_mouse_event(self.event_source.clone(), event_type,
+        // dest, button)
+        let event = CGEvent::new_mouse_event(
+            self.event_source.clone(),
+            event_type,
+            dest,
+            CGMouseButton::Left,
+        )
+        .map_err(|()| InputError::Simulate("failed creating event to move the mouse"))?;
+
+        // HACK: Remove this once it is no longer needed
+        event.set_integer_value_field(
+            core_graphics::event::EventField::MOUSE_EVENT_BUTTON_NUMBER,
+            button.into(),
+        );
 
         // Add information by how much the mouse was moved
         event.set_integer_value_field(
@@ -906,7 +919,8 @@ impl Enigo {
         }
     }
 
-    fn move_type(&self) -> (CGEventType, CGMouseButton) {
+    // HACK: We should return (CGEventType, CGMouseButton), but we cannot until https://github.com/servo/core-foundation-rs/issues/745 is resolved
+    fn move_type(&self) -> (CGEventType, u8) {
         // Find the longest pressed mouse button
         if let Some((idx, _)) = self
             .pressed_mouse_buttons
@@ -916,11 +930,11 @@ impl Enigo {
             .min_by_key(|(_, (_, ts))| *ts)
         {
             let event_type = match idx {
-                0 => (CGEventType::LeftMouseDragged, CGMouseButton::Left),
-                1 => (CGEventType::RightMouseDragged, CGMouseButton::Right),
-                2 => (CGEventType::OtherMouseDragged, CGMouseButton::Center),
-                3 => (CGEventType::OtherMouseDragged, CGMouseButton::from(3)),
-                4 => (CGEventType::OtherMouseDragged, CGMouseButton::from(4)),
+                0 => (CGEventType::LeftMouseDragged, 0), // CGMouseButton::Left
+                1 => (CGEventType::RightMouseDragged, 1), // CGMouseButton::Right
+                2 => (CGEventType::OtherMouseDragged, 2), // CGMouseButton::Center
+                3 => (CGEventType::OtherMouseDragged, 3), // CGMouseButton::from(3)
+                4 => (CGEventType::OtherMouseDragged, 4), // CGMouseButton::from(4)
                 _ => {
                     unreachable!("impossible button last clicked");
                 }
@@ -937,19 +951,19 @@ impl Enigo {
         {
             // No button is pressed *now*, but a state change was recent
             // The mouse button here is ignored so it can be anything
-            return (CGEventType::MouseMoved, CGMouseButton::Left);
+            return (CGEventType::MouseMoved, 0); // CGMouseButton::Left
         }
 
         // Otherwise, fall back to the OS
         let mask = NSEvent::pressedMouseButtons();
         if mask == 0 {
             // The mouse button here is ignored so it can be anything
-            return (CGEventType::MouseMoved, CGMouseButton::Left);
+            return (CGEventType::MouseMoved, 0); // CGMouseButton::Left
         }
 
         // Find the lowest-index pressed button
         let idx = mask.trailing_zeros() as usize;
-        let button = CGMouseButton::from(idx);
+        let button = idx.try_into().unwrap();
 
         let event_type = match idx {
             0 => CGEventType::LeftMouseDragged,

@@ -135,13 +135,12 @@ impl Enigo {
         self.held.clone()
     }
 
-    /// Returns the restore_token so callers can retrieve and reuse the token
+    /// Returns the `restore_token` so callers can retrieve and reuse the token
     pub fn restore_token(&self) -> Option<String> {
-        if cfg!(any(feature = "libei_tokio", feature = "libei_smol")) {
-            self.libei.as_ref().and_then(|c| c.restore_token())
-        } else {
-            None
-        }
+        #[cfg(not(any(feature = "libei_tokio", feature = "libei_smol")))]
+        None
+        #[cfg(any(feature = "libei_tokio", feature = "libei_smol"))]
+        self.libei.as_ref().and_then(libei::Con::restore_token)
     }
 }
 

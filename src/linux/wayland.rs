@@ -276,8 +276,10 @@ impl Con {
 }
 
 impl Drop for Con {
-    // Destroy the Wayland objects we created
     fn drop(&mut self) {
+        // Tear-down order: devices → managers → flush/roundtrip.
+        // The registry is dropped with WaylandState afterward.
+
         if let Some(vk) = self.state.virtual_keyboard.take() {
             vk.destroy();
         }
@@ -286,6 +288,28 @@ impl Drop for Con {
         }
         if let Some(vp) = self.state.virtual_pointer.take() {
             vp.destroy();
+        }
+
+        if let Some(keyboard) = self.state.seat_keyboard.take() {
+            if keyboard.version() >= wl_keyboard::REQ_RELEASE_SINCE {
+                keyboard.release();
+            }
+        }
+        self.state.seat_keymap = None;
+        if let Some(pointer) = self.state.seat_pointer.take() {
+            if pointer.version() >= wl_pointer::REQ_RELEASE_SINCE {
+                pointer.release();
+            }
+        }
+
+        // Managers after their devices. Virtual keyboard manager has no
+        // destructor in the protocol — dropping the proxy is all we can do.
+        self.state.keyboard_manager.take();
+        if let Some(im_mgr) = self.state.im_manager.take() {
+            im_mgr.destroy();
+        }
+        if let Some(pointer_mgr) = self.state.pointer_manager.take() {
+            pointer_mgr.destroy();
         }
 
         if self.flush().is_err() {
@@ -837,12 +861,23 @@ impl Dispatch<zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1, ()> for WaylandStat
 }
 
 impl Drop for WaylandState {
-    // Destroy the manager for the protocols we used
     fn drop(&mut self) {
-        if let Some(im_mgr) = self.im_manager.as_ref() {
+        // Defensive fallback if something bypassed Con::drop's ordered teardown.
+        if let Some(vk) = self.virtual_keyboard.take() {
+            vk.destroy();
+        }
+        if let Some(im) = self.input_method.take() {
+            im.destroy();
+        }
+        if let Some(vp) = self.virtual_pointer.take() {
+            vp.destroy();
+        }
+        // No destroy request on zwp_virtual_keyboard_manager_v1.
+        self.keyboard_manager.take();
+        if let Some(im_mgr) = self.im_manager.take() {
             im_mgr.destroy();
         }
-        if let Some(pointer_mgr) = self.pointer_manager.as_ref() {
+        if let Some(pointer_mgr) = self.pointer_manager.take() {
             pointer_mgr.destroy();
         }
     }
